@@ -29,6 +29,9 @@ interface OnboardConfig {
   // Model (only for new agents)
   model?: string;
   
+  // BYOK Providers (for free tier)
+  providers?: Array<{ id: string; name: string; apiKey: string }>;
+  
   // Channels (with access control)
   telegram: { enabled: boolean; token?: string; dmPolicy?: 'pairing' | 'allowlist' | 'open'; allowedUsers?: string[] };
   slack: { enabled: boolean; appToken?: string; botToken?: string; allowedUsers?: string[] };
@@ -357,6 +360,86 @@ async function stepAgent(config: OnboardConfig, env: Record<string, string>): Pr
   }
 }
 
+// BYOK Provider definitions (same as letta-code)
+const BYOK_PROVIDERS = [
+  { id: 'anthropic', name: 'lc-anthropic', displayName: 'Anthropic (Claude)', providerType: 'anthropic' },
+  { id: 'openai', name: 'lc-openai', displayName: 'OpenAI', providerType: 'openai' },
+  { id: 'gemini', name: 'lc-gemini', displayName: 'Google Gemini', providerType: 'google_ai' },
+  { id: 'zai', name: 'lc-zai', displayName: 'zAI', providerType: 'zai' },
+  { id: 'minimax', name: 'lc-minimax', displayName: 'MiniMax', providerType: 'minimax' },
+  { id: 'openrouter', name: 'lc-openrouter', displayName: 'OpenRouter', providerType: 'openrouter' },
+];
+
+async function stepProviders(config: OnboardConfig, env: Record<string, string>): Promise<void> {
+  // Only for free tier users on Letta Cloud (not self-hosted, not paid)
+  if (config.authMethod === 'selfhosted') return;
+  if (config.billingTier !== 'free') return;
+  
+  const selectedProviders = await p.multiselect({
+    message: 'Add LLM provider keys (optional - for BYOK models)',
+    options: BYOK_PROVIDERS.map(provider => ({
+      value: provider.id,
+      label: provider.displayName,
+      hint: `Connect your ${provider.displayName} API key`,
+    })),
+    required: false,
+  });
+  
+  if (p.isCancel(selectedProviders)) { p.cancel('Setup cancelled'); process.exit(0); }
+  
+  // If no providers selected, skip
+  if (!selectedProviders || selectedProviders.length === 0) {
+    return;
+  }
+  
+  config.providers = [];
+  const apiKey = config.apiKey || env.LETTA_API_KEY || process.env.LETTA_API_KEY;
+  
+  // Collect API keys for each selected provider
+  for (const providerId of selectedProviders as string[]) {
+    const provider = BYOK_PROVIDERS.find(p => p.id === providerId);
+    if (!provider) continue;
+    
+    const providerKey = await p.text({
+      message: `${provider.displayName} API Key`,
+      placeholder: 'sk-...',
+    });
+    
+    if (p.isCancel(providerKey)) { p.cancel('Setup cancelled'); process.exit(0); }
+    
+    if (providerKey) {
+      // Create provider via Letta API
+      const spinner = p.spinner();
+      spinner.start(`Connecting ${provider.displayName}...`);
+      
+      try {
+        const response = await fetch('https://api.letta.com/v1/providers', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            name: provider.name,
+            provider_type: provider.providerType,
+            api_key: providerKey,
+          }),
+        });
+        
+        if (response.ok) {
+          spinner.stop(`Connected ${provider.displayName}`);
+          config.providers.push({ id: provider.id, name: provider.name, apiKey: providerKey });
+        } else {
+          const error = await response.text();
+          spinner.stop(`Failed to connect ${provider.displayName}: ${error}`);
+        }
+      } catch (err) {
+        spinner.stop(`Failed to connect ${provider.displayName}`);
+      }
+    }
+  }
+}
+
 async function stepModel(config: OnboardConfig, env: Record<string, string>): Promise<void> {
   // Only for new agents
   if (config.agentChoice !== 'new') return;
@@ -368,11 +451,10 @@ async function stepModel(config: OnboardConfig, env: Record<string, string>): Pr
   // Determine if self-hosted (not Letta Cloud)
   const isSelfHosted = config.authMethod === 'selfhosted';
   
-  // Fetch billing tier for Letta Cloud users
-  let billingTier: string | null = null;
-  if (!isSelfHosted) {
+  // Fetch billing tier for Letta Cloud users (if not already fetched)
+  let billingTier: string | null = config.billingTier || null;
+  if (!isSelfHosted && !billingTier) {
     spinner.start('Checking account...');
-    // Pass the API key explicitly since it may not be in process.env yet
     const apiKey = config.apiKey || env.LETTA_API_KEY || process.env.LETTA_API_KEY;
     billingTier = await getBillingTier(apiKey, isSelfHosted);
     config.billingTier = billingTier ?? undefined;
@@ -729,7 +811,10 @@ async function reviewLoop(config: OnboardConfig, env: Record<string, string>): P
     if (choice === 'auth') await stepAuth(config, env);
     else if (choice === 'agent') {
       await stepAgent(config, env);
-      if (config.agentChoice === 'new') await stepModel(config, env);
+      if (config.agentChoice === 'new') {
+        await stepProviders(config, env);
+        await stepModel(config, env);
+      }
     }
     else if (choice === 'channels') await stepChannels(config, env);
     else if (choice === 'features') await stepFeatures(config);
@@ -805,6 +890,19 @@ export async function onboard(): Promise<void> {
   // Run through all steps
   await stepAuth(config, env);
   await stepAgent(config, env);
+  
+  // Fetch billing tier for free plan detection (only for Letta Cloud)
+  if (config.authMethod !== 'selfhosted' && config.agentChoice === 'new') {
+    const { getBillingTier } = await import('./utils/model-selection.js');
+    const spinner = p.spinner();
+    spinner.start('Checking account...');
+    const apiKey = config.apiKey || env.LETTA_API_KEY || process.env.LETTA_API_KEY;
+    const billingTier = await getBillingTier(apiKey, false);
+    config.billingTier = billingTier ?? undefined;
+    spinner.stop(billingTier === 'free' ? 'Free plan' : `Plan: ${billingTier || 'Pro'}`);
+  }
+  
+  await stepProviders(config, env);
   await stepModel(config, env);
   await stepChannels(config, env);
   await stepFeatures(config);
