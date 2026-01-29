@@ -305,7 +305,7 @@ export class LettaBot {
         clearInterval(typingInterval);
       }
       
-      console.log(`[Bot] Stream complete. Total messages: ${streamCount}, Response length: ${response.length}`);
+      console.log(`[Bot] Stream complete. Response length: ${response.length}`);
       console.log(`[Bot] Response preview: ${response.slice(0, 100)}...`);
       
       // Send final response
