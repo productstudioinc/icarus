@@ -146,7 +146,7 @@ Ask the bot owner to approve with:
     
     // Dynamic import
     const { 
-      default: makeWASocket, 
+      makeWASocket, 
       useMultiFileAuthState, 
       DisconnectReason,
       fetchLatestBaileysVersion,
