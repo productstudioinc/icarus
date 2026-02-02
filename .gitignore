@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files (contain secrets)
+.env
+.env.local
+
+# Letta local data
+.letta/
+
+# User data
+user-agents.json
+
+# Reference repos (cloned for research)
+*-reference/
+
+# Test files
+test-*.mjs
+test-*.js
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Runtime files
+cron-log.jsonl
+cron-jobs.json
+lettabot-agent.json
+PERSONA.md
+
+# Related repos
+moltbot/
+letta-code-sdk/
+
+# WhatsApp session (contains credentials)
+data/whatsapp-session/
+
+# Config with secrets
+lettabot.yaml
+lettabot.yml
+bun.lock
