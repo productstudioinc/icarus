@@ -98,6 +98,34 @@ That's it! Message your bot on Telegram.
 
 > **Note:** For detailed environment variable reference and multi-channel setup, see [SKILL.md](./SKILL.md)
 
+## Docker / Orbstack
+
+1. Create a host data directory (example: `~/lettabot-data`).
+2. Put your `lettabot.yaml` in that directory.
+3. Build the image:
+
+```bash
+docker build -t lettabot .
+```
+
+4. Run:
+
+```bash
+docker run --rm -p 8080:8080 -v ~/lettabot-data:/data lettabot
+```
+
+Notes:
+- For Letta Cloud, your `lettabot.yaml` should include:
+
+```yaml
+server:
+  mode: cloud
+  apiKey: letta_...
+```
+
+- You can also set `LETTA_API_KEY` as an environment variable instead of putting it in `lettabot.yaml`.
+- Health check: `http://localhost:8080/health` should return `ok`.
+
 ## Deploy to Railway
 
 Deploy LettaBot to the cloud with one click:
