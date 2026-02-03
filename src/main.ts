@@ -469,9 +469,6 @@ async function main() {
     pollingService.start();
   }
   
-  // Start all channels
-  await bot.start();
-  
   // Start health check server (for Railway/Docker health checks)
   // Only exposes "ok" - no sensitive info
   const healthPort = parseInt(process.env.PORT || '8080', 10);
@@ -487,6 +484,9 @@ async function main() {
   healthServer.listen(healthPort, () => {
     console.log(`[Health] Listening on :${healthPort}`);
   });
+  
+  // Start all channels (health check should be available even if a channel start blocks)
+  await bot.start();
   
   // Log status
   const status = bot.getStatus();
