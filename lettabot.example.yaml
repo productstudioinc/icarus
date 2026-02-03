@@ -41,6 +41,11 @@ channels:
   #   enabled: true
   #   appToken: xapp-...
   #   botToken: xoxb-...
+  # discord:
+  #   enabled: true
+  #   token: YOUR-DISCORD-BOT-TOKEN
+  #   guildId: YOUR-DISCORD-GUILD-ID
+  #   channelId: YOUR-PRIMARY-CHANNEL-ID
   # whatsapp:
   #   enabled: true
   #   selfChat: false

@@ -20,7 +20,7 @@ Plus at least ONE channel:
 |---------|----------|---------------|
 | Telegram | `TELEGRAM_BOT_TOKEN` | Message [@BotFather](https://t.me/BotFather) on Telegram |
 | Slack | `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` | Create app at [api.slack.com/apps](https://api.slack.com/apps) |
-| Discord | `DISCORD_BOT_TOKEN` | Create app at [discord.com/developers](https://discord.com/developers/applications) |
+| Discord | `DISCORD_BOT_TOKEN` + `DISCORD_GUILD_ID` + `DISCORD_CHANNEL_ID` | Create app at [discord.com/developers](https://discord.com/developers/applications) and copy IDs in Discord |
 
 ## Optional Environment Variables
 
@@ -32,7 +32,8 @@ Plus at least ONE channel:
 | `WORKING_DIR` | `/tmp/lettabot` | Data directory (set to `/data` with volume) |
 | `TELEGRAM_DM_POLICY` | `pairing` | Access control: `pairing`, `allowlist`, or `open` |
 | `SLACK_ALLOWED_USERS` | (empty) | Comma-separated Slack user IDs |
-| `DISCORD_DM_POLICY` | `pairing` | Access control: `pairing`, `allowlist`, or `open` |
+| `DISCORD_GUILD_ID` | (empty) | Discord server (guild) ID |
+| `DISCORD_CHANNEL_ID` | (empty) | Primary channel ID (reply to all) |
 
 ## Persistent Storage
 
@@ -77,6 +78,7 @@ Enable Socket Mode in your Slack app settings.
 Requires:
 - Bot token from the Bot section
 - **Message Content Intent** enabled under Privileged Gateway Intents
+- Server (guild) ID and primary channel ID (Developer Mode → Copy ID)
 
 ### WhatsApp (Advanced)
 WhatsApp requires a QR code scan on first setup:

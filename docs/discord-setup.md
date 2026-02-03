@@ -8,6 +8,7 @@ LettaBot connects to Discord using a **Bot Application** with the Gateway API:
 - No public URL required (uses WebSocket connection)
 - Works behind firewalls
 - Real-time bidirectional communication
+- Guild-only (no DMs)
 
 ## Prerequisites
 
@@ -65,7 +66,15 @@ https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=68608&
 
 You should see `[Bot Name] has joined the server` in Discord.
 
-## Step 6: Configure LettaBot
+## Step 6: Copy Guild and Channel IDs
+
+LettaBot only responds in a single server (guild) and uses a **primary channel** where it replies to everything.
+
+1. In Discord, go to **User Settings → Advanced → Developer Mode** and enable it
+2. Right-click your server name → **Copy Server ID** (this is your `guildId`)
+3. Right-click the primary channel → **Copy Channel ID** (this is your `channelId`)
+
+## Step 7: Configure LettaBot
 
 Run the onboarding wizard and select Discord:
 
@@ -80,10 +89,11 @@ channels:
   discord:
     enabled: true
     token: "your-bot-token-here"
-    dmPolicy: pairing  # or 'allowlist' or 'open'
+    guildId: "123456789012345678"
+    channelId: "123456789012345678"
 ```
 
-## Step 7: Start LettaBot
+## Step 8: Start LettaBot
 
 ```bash
 lettabot server
@@ -94,49 +104,30 @@ You should see:
 Registered channel: Discord
 [Discord] Connecting...
 [Discord] Bot logged in as YourBot#1234
-[Discord] DM policy: pairing
+[Discord] Guild: 123456789012345678
+[Discord] Primary channel: 123456789012345678
 ```
 
-## Step 8: Test the Integration
+## Step 9: Test the Integration
 
 ### In a Server Channel
-1. Go to a text channel in your Discord server
-2. Type `@YourBot hello!`
+1. Go to your **primary channel**
+2. Type `hello!` (no mention needed)
+3. The bot should respond
+
+### In Other Channels
+1. Go to another channel in the same server
+2. Type `@YourBot hello!` or reply to a bot message
 3. The bot should respond
 
 ### Direct Message
-1. Right-click on the bot in the server member list
-2. Click **"Message"**
-3. Send a message: `Hello!`
-4. The bot should respond (may require pairing approval first)
+DMs are disabled. The bot will not respond to direct messages.
 
-## Access Control
+## Message Routing
 
-LettaBot supports three DM policies for Discord:
-
-### Pairing (Recommended)
-```yaml
-dmPolicy: pairing
-```
-- New users receive a pairing code
-- Approve with: `lettabot pairing approve discord <CODE>`
-- Most secure for personal use
-
-### Allowlist
-```yaml
-dmPolicy: allowlist
-allowedUsers:
-  - "123456789012345678"  # Discord user IDs
-```
-- Only specified users can interact
-- Find user IDs: Enable Developer Mode in Discord settings, then right-click a user → "Copy User ID"
-
-### Open
-```yaml
-dmPolicy: open
-```
-- Anyone can message the bot
-- Not recommended for personal bots
+- **Primary channel** (`channelId`): bot replies to all messages
+- **Other channels in the same guild**: bot replies only when mentioned or when replying to the bot
+- **Other guilds or DMs**: ignored
 
 ## Adding Reactions
 
@@ -168,8 +159,9 @@ lettabot-react add --emoji ":thumbsup:" --channel discord --chat 123456789 --mes
    - Server Settings → Roles → Your Bot's Role
    - Or check channel-specific permissions
 
-3. **Check pairing status** if using pairing mode:
-   - New users need to be approved via `lettabot pairing list`
+3. **Check routing rules**:
+   - Primary channel replies to all messages
+   - Other channels require @mention or reply to the bot
 
 ### "0 Servers" in Developer Portal
 
@@ -177,11 +169,7 @@ The bot hasn't been invited to any servers yet. Use the invite URL from Step 4.
 
 ### Bot can't DM users
 
-Discord bots can only DM users who:
-- Share a server with the bot, OR
-- Have previously DM'd the bot
-
-This is a Discord limitation, not a LettaBot issue.
+DMs are disabled by design. Use the primary channel or mention the bot in other channels.
 
 ### Rate limiting
 
@@ -190,9 +178,8 @@ If the bot stops responding temporarily, it may be rate-limited by Discord. Wait
 ## Security Notes
 
 - **Bot tokens** should be kept secret - never commit them to git
-- Use `dmPolicy: pairing` or `allowlist` in production
 - The bot can only see messages in channels it has access to
-- DMs are only visible between the bot and that specific user
+- DMs are disabled
 
 ## Cross-Channel Memory
 

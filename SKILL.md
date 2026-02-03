@@ -36,7 +36,7 @@ lettabot server
 - `LETTA_BASE_URL`: `https://api.letta.com`
 - `LETTA_AGENT_NAME`: `"lettabot"`
 - `LETTA_MODEL`: `"claude-sonnet-4"`
-- `*_DM_POLICY`: `"pairing"` (requires approval before messaging)
+- `*_DM_POLICY`: `"pairing"` (for Telegram/Slack/WhatsApp/Signal)
 - `WHATSAPP_SELF_CHAT_MODE`: `true` (only "Message Yourself" chat)
 - `SIGNAL_SELF_CHAT_MODE`: `true` (only "Note to Self")
 
@@ -97,10 +97,10 @@ The wizard will guide you through:
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
 | `DISCORD_BOT_TOKEN` | Bot token from discord.com/developers/applications | ✅ | - |
-| `DISCORD_DM_POLICY` | Access control: `pairing` \| `allowlist` \| `open` | ❌ | `pairing` |
-| `DISCORD_ALLOWED_USERS` | Comma-separated Discord user IDs (if dmPolicy=allowlist) | ❌ | - |
+| `DISCORD_GUILD_ID` | Discord server (guild) ID | ✅ | - |
+| `DISCORD_CHANNEL_ID` | Primary channel ID (reply to all) | ✅ | - |
 
-**Setup Discord bot:** See [docs/discord-setup.md](./docs/discord-setup.md)
+**Setup Discord bot:** See [docs/discord-setup.md](./docs/discord-setup.md). DMs are disabled; the bot only responds in the configured guild.
 
 ### WhatsApp
 
