@@ -8,7 +8,7 @@
 import type { ChannelAdapter } from './types.js';
 import type { InboundAttachment, InboundMessage, OutboundMessage } from '../core/types.js';
 import { buildAttachmentPath, downloadToFile } from './attachments.js';
-import type { Attachment, Collection, TextBasedChannel } from 'discord.js';
+import type { Attachment, Collection } from 'discord.js';
 
 // Dynamic import to avoid requiring Discord deps if not used
 let Client: typeof import('discord.js').Client;
@@ -185,7 +185,7 @@ export class DiscordAdapter implements ChannelAdapter {
   async sendMessage(msg: OutboundMessage): Promise<{ messageId: string }> {
     if (!this.client) throw new Error('Discord not started');
     const channel = await this.client.channels.fetch(msg.chatId);
-    if (!isTextBasedChannel(channel)) {
+    if (!isSendableChannel(channel)) {
       throw new Error(`Discord channel not found or not text-based: ${msg.chatId}`);
     }
 
@@ -196,11 +196,15 @@ export class DiscordAdapter implements ChannelAdapter {
   async editMessage(chatId: string, messageId: string, text: string): Promise<void> {
     if (!this.client) throw new Error('Discord not started');
     const channel = await this.client.channels.fetch(chatId);
-    if (!isTextBasedChannel(channel)) {
+    if (!isSendableChannel(channel)) {
       throw new Error(`Discord channel not found or not text-based: ${chatId}`);
     }
 
     const message = await channel.messages.fetch(messageId);
+    if (!isEditableMessage(message)) {
+      console.warn('[Discord] Cannot edit message: unsupported message type');
+      return;
+    }
     const botUserId = this.client.user?.id;
     if (!botUserId || message.author.id !== botUserId) {
       console.warn('[Discord] Cannot edit message not sent by bot');
@@ -213,7 +217,7 @@ export class DiscordAdapter implements ChannelAdapter {
     if (!this.client) return;
     try {
       const channel = await this.client.channels.fetch(chatId);
-      if (!isTextBasedChannel(channel)) return;
+      if (!isSendableChannel(channel)) return;
       await channel.sendTyping();
     } catch {
       // Ignore typing indicator failures
@@ -269,9 +273,32 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isTextBasedChannel(channel: unknown): channel is TextBasedChannel {
+type SendableChannel = {
+  send: (content: string) => Promise<{ id: string }>;
+  sendTyping: () => Promise<void>;
+  messages: { fetch: (messageId: string) => Promise<unknown> };
+};
+
+type EditableMessage = {
+  author: { id: string };
+  edit: (content: string) => Promise<unknown>;
+};
+
+function isSendableChannel(channel: unknown): channel is SendableChannel {
   if (!isRecord(channel)) return false;
-  const isTextBased = channel['isTextBased'];
-  if (typeof isTextBased !== 'function') return false;
-  return isTextBased.call(channel) === true;
+  const send = channel['send'];
+  const sendTyping = channel['sendTyping'];
+  const messages = channel['messages'];
+  if (typeof send !== 'function' || typeof sendTyping !== 'function') return false;
+  if (!isRecord(messages) || typeof messages['fetch'] !== 'function') return false;
+  return true;
+}
+
+function isEditableMessage(message: unknown): message is EditableMessage {
+  if (!isRecord(message)) return false;
+  const author = message['author'];
+  const edit = message['edit'];
+  if (!isRecord(author) || typeof author['id'] !== 'string') return false;
+  if (typeof edit !== 'function') return false;
+  return true;
 }
