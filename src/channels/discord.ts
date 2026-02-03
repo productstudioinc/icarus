@@ -2,24 +2,22 @@
  * Discord Channel Adapter
  *
  * Uses discord.js for Discord API.
- * Supports DM pairing for secure access control.
+ * Guild-only with a primary channel; no DMs.
  */
 
 import type { ChannelAdapter } from './types.js';
-import type { InboundAttachment, InboundMessage, OutboundFile, OutboundMessage } from '../core/types.js';
-import type { DmPolicy } from '../pairing/types.js';
-import { isUserAllowed, upsertPairingRequest } from '../pairing/store.js';
+import type { InboundAttachment, InboundMessage, OutboundMessage } from '../core/types.js';
 import { buildAttachmentPath, downloadToFile } from './attachments.js';
+import type { Attachment, Collection, TextBasedChannel } from 'discord.js';
 
 // Dynamic import to avoid requiring Discord deps if not used
 let Client: typeof import('discord.js').Client;
 let GatewayIntentBits: typeof import('discord.js').GatewayIntentBits;
-let Partials: typeof import('discord.js').Partials;
 
 export interface DiscordConfig {
   token: string;
-  dmPolicy?: DmPolicy;      // 'pairing' (default), 'allowlist', or 'open'
-  allowedUsers?: string[];  // Discord user IDs
+  guildId?: string;
+  channelId?: string; // Primary channel where all messages are handled
   attachmentsDir?: string;
   attachmentsMaxBytes?: number;
 }
@@ -38,77 +36,9 @@ export class DiscordAdapter implements ChannelAdapter {
   onCommand?: (command: string) => Promise<string | null>;
 
   constructor(config: DiscordConfig) {
-    this.config = {
-      ...config,
-      dmPolicy: config.dmPolicy || 'pairing',
-    };
+    this.config = { ...config };
     this.attachmentsDir = config.attachmentsDir;
     this.attachmentsMaxBytes = config.attachmentsMaxBytes;
-  }
-
-  /**
-   * Check if a user is authorized based on dmPolicy
-   * Returns 'allowed', 'blocked', or 'pairing'
-   */
-  private async checkAccess(userId: string): Promise<'allowed' | 'blocked' | 'pairing'> {
-    const policy = this.config.dmPolicy || 'pairing';
-
-    // Open policy: everyone allowed
-    if (policy === 'open') {
-      return 'allowed';
-    }
-
-    // Check if already allowed (config or store)
-    const allowed = await isUserAllowed('discord', userId, this.config.allowedUsers);
-    if (allowed) {
-      return 'allowed';
-    }
-
-    // Allowlist policy: not allowed if not in list
-    if (policy === 'allowlist') {
-      return 'blocked';
-    }
-
-    // Pairing policy: needs pairing
-    return 'pairing';
-  }
-
-  /**
-   * Format pairing message for Discord
-   */
-  private formatPairingMsg(code: string): string {
-    return `Hi! This bot requires pairing.
-
-Your pairing code: **${code}**
-
-Ask the bot owner to approve with:
-\`lettabot pairing approve discord ${code}\``;
-  }
-
-  private async sendPairingMessage(
-    message: import('discord.js').Message,
-    text: string
-  ): Promise<void> {
-    const channel = message.channel;
-    const canSend = channel.isTextBased() && 'send' in channel;
-    const sendable = canSend
-      ? (channel as unknown as { send: (content: string) => Promise<unknown> })
-      : null;
-
-    if (!message.guildId) {
-      if (sendable) {
-        await sendable.send(text);
-      }
-      return;
-    }
-
-    try {
-      await message.author.send(text);
-    } catch {
-      if (sendable) {
-        await sendable.send(text);
-      }
-    }
   }
 
   async start(): Promise<void> {
@@ -117,31 +47,53 @@ Ask the bot owner to approve with:
     const discord = await import('discord.js');
     Client = discord.Client;
     GatewayIntentBits = discord.GatewayIntentBits;
-    Partials = discord.Partials;
 
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.DirectMessages,
       ],
-      partials: [Partials.Channel],
     });
 
     this.client.on('ready', () => {
       const tag = this.client?.user?.tag || '(unknown)';
       console.log(`[Discord] Bot logged in as ${tag}`);
-      console.log(`[Discord] DM policy: ${this.config.dmPolicy}`);
+      console.log(`[Discord] Guild: ${this.config.guildId || '(unset)'}`);
+      console.log(`[Discord] Primary channel: ${this.config.channelId || '(unset)'}`);
       this.running = true;
     });
 
     this.client.on('messageCreate', async (message) => {
       if (message.author?.bot) return;
+      if (!message.guildId) return;
+      if (this.config.guildId && message.guildId !== this.config.guildId) return;
 
       let content = (message.content || '').trim();
       const userId = message.author?.id;
       if (!userId) return;
+
+      const botUserId = this.client?.user?.id;
+      if (!botUserId) return;
+
+      const isPrimaryChannel = this.config.channelId
+        ? message.channel.id === this.config.channelId
+        : false;
+
+      if (!isPrimaryChannel) {
+        const isMentioned = message.mentions.has(botUserId);
+        let isReplyToBot = false;
+        if (message.reference?.messageId) {
+          try {
+            const referenced = await message.fetchReference();
+            isReplyToBot = referenced.author.id === botUserId;
+          } catch {
+            // Ignore reference fetch failures
+          }
+        }
+
+        if (!isMentioned && !isReplyToBot) return;
+      }
       
       // Handle audio attachments
       const audioAttachment = message.attachments.find(a => a.contentType?.startsWith('audio/'));
@@ -166,35 +118,6 @@ Ask the bot owner to approve with:
         } catch (error) {
           console.error('[Discord] Error transcribing audio:', error);
         }
-      }
-
-      const access = await this.checkAccess(userId);
-      if (access === 'blocked') {
-        const ch = message.channel;
-        if (ch.isTextBased() && 'send' in ch) {
-          await (ch as { send: (content: string) => Promise<unknown> }).send(
-            "Sorry, you're not authorized to use this bot."
-          );
-        }
-        return;
-      }
-
-      if (access === 'pairing') {
-        const { code, created } = await upsertPairingRequest('discord', userId, {
-          username: message.author.username,
-        });
-
-        if (!code) {
-          await message.channel.send('Too many pending pairing requests. Please try again later.');
-          return;
-        }
-
-        if (created) {
-          console.log(`[Discord] New pairing request from ${userId} (${message.author.username}): ${code}`);
-        }
-
-        await this.sendPairingMessage(message, this.formatPairingMsg(code));
-        return;
       }
 
       const attachments = await this.collectAttachments(message.attachments, message.channel.id);
@@ -262,18 +185,18 @@ Ask the bot owner to approve with:
   async sendMessage(msg: OutboundMessage): Promise<{ messageId: string }> {
     if (!this.client) throw new Error('Discord not started');
     const channel = await this.client.channels.fetch(msg.chatId);
-    if (!channel || !channel.isTextBased() || !('send' in channel)) {
+    if (!isTextBasedChannel(channel)) {
       throw new Error(`Discord channel not found or not text-based: ${msg.chatId}`);
     }
 
-    const result = await (channel as { send: (content: string) => Promise<{ id: string }> }).send(msg.text);
+    const result = await channel.send(msg.text);
     return { messageId: result.id };
   }
 
   async editMessage(chatId: string, messageId: string, text: string): Promise<void> {
     if (!this.client) throw new Error('Discord not started');
     const channel = await this.client.channels.fetch(chatId);
-    if (!channel || !channel.isTextBased()) {
+    if (!isTextBasedChannel(channel)) {
       throw new Error(`Discord channel not found or not text-based: ${chatId}`);
     }
 
@@ -290,8 +213,8 @@ Ask the bot owner to approve with:
     if (!this.client) return;
     try {
       const channel = await this.client.channels.fetch(chatId);
-      if (!channel || !channel.isTextBased() || !('sendTyping' in channel)) return;
-      await (channel as { sendTyping: () => Promise<void> }).sendTyping();
+      if (!isTextBasedChannel(channel)) return;
+      await channel.sendTyping();
     } catch {
       // Ignore typing indicator failures
     }
@@ -301,12 +224,13 @@ Ask the bot owner to approve with:
     return true;
   }
 
-  private async collectAttachments(attachments: unknown, channelId: string): Promise<InboundAttachment[]> {
-    if (!attachments || typeof attachments !== 'object') return [];
-    const list = Array.from((attachments as { values: () => Iterable<DiscordAttachment> }).values?.() || []);
-    if (list.length === 0) return [];
+  private async collectAttachments(
+    attachments: Collection<string, Attachment>,
+    channelId: string
+  ): Promise<InboundAttachment[]> {
+    if (attachments.size === 0) return [];
     const results: InboundAttachment[] = [];
-    for (const attachment of list) {
+    for (const attachment of attachments.values()) {
       const name = attachment.name || attachment.id || 'attachment';
       const entry: InboundAttachment = {
         id: attachment.id,
@@ -341,10 +265,13 @@ Ask the bot owner to approve with:
   }
 }
 
-type DiscordAttachment = {
-  id?: string;
-  name?: string | null;
-  contentType?: string | null;
-  size?: number;
-  url?: string;
-};
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isTextBasedChannel(channel: unknown): channel is TextBasedChannel {
+  if (!isRecord(channel)) return false;
+  const isTextBased = channel['isTextBased'];
+  if (typeof isTextBased !== 'function') return false;
+  return isTextBased.call(channel) === true;
+}

@@ -58,7 +58,7 @@ You don't need to notify the user about everything. Use judgment about what's wo
 
 - **telegram** - Telegram messenger
 - **slack** - Slack workspace  
-- **discord** - Discord server/DM
+- **discord** - Discord server (guild-only, no DMs)
 - **whatsapp** - WhatsApp (if configured)
 - **signal** - Signal messenger (if configured)
 

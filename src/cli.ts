@@ -199,7 +199,8 @@ Environment:
   TELEGRAM_BOT_TOKEN      Bot token from @BotFather
   TELEGRAM_DM_POLICY      DM access policy (pairing, allowlist, open)
   DISCORD_BOT_TOKEN       Discord bot token
-  DISCORD_DM_POLICY       DM access policy (pairing, allowlist, open)
+  DISCORD_GUILD_ID        Discord server (guild) ID
+  DISCORD_CHANNEL_ID      Discord primary channel ID
   SLACK_BOT_TOKEN         Slack bot token (xoxb-...)
   SLACK_APP_TOKEN         Slack app token (xapp-...)
   HEARTBEAT_INTERVAL_MIN  Heartbeat interval in minutes

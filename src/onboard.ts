@@ -40,8 +40,8 @@ function readConfigFromEnv(existingConfig: any): any {
     discord: {
       enabled: !!process.env.DISCORD_BOT_TOKEN,
       botToken: process.env.DISCORD_BOT_TOKEN || existingConfig.channels?.discord?.token,
-      dmPolicy: process.env.DISCORD_DM_POLICY || existingConfig.channels?.discord?.dmPolicy || 'pairing',
-      allowedUsers: process.env.DISCORD_ALLOWED_USERS?.split(',').map(s => s.trim()) || existingConfig.channels?.discord?.allowedUsers,
+      guildId: process.env.DISCORD_GUILD_ID || existingConfig.channels?.discord?.guildId,
+      channelId: process.env.DISCORD_CHANNEL_ID || existingConfig.channels?.discord?.channelId,
     },
     
     whatsapp: {
@@ -93,8 +93,8 @@ async function saveConfigFromEnv(config: any, configPath: string): Promise<void>
       discord: config.discord.enabled ? {
         enabled: true,
         token: config.discord.botToken,
-        dmPolicy: config.discord.dmPolicy,
-        allowedUsers: config.discord.allowedUsers,
+        guildId: config.discord.guildId,
+        channelId: config.discord.channelId,
       } : { enabled: false },
       
       whatsapp: config.whatsapp.enabled ? {
@@ -151,7 +151,7 @@ interface OnboardConfig {
   slack: { enabled: boolean; appToken?: string; botToken?: string; allowedUsers?: string[] };
   whatsapp: { enabled: boolean; selfChat?: boolean; dmPolicy?: 'pairing' | 'allowlist' | 'open'; allowedUsers?: string[] };
   signal: { enabled: boolean; phone?: string; selfChat?: boolean; dmPolicy?: 'pairing' | 'allowlist' | 'open'; allowedUsers?: string[] };
-  discord: { enabled: boolean; token?: string; dmPolicy?: 'pairing' | 'allowlist' | 'open'; allowedUsers?: string[] };
+  discord: { enabled: boolean; token?: string; guildId?: string; channelId?: string };
   
   // Google Workspace (via gog CLI)
   google: { enabled: boolean; account?: string; services?: string[] };
@@ -788,7 +788,10 @@ async function stepChannels(config: OnboardConfig, env: Record<string, string>):
       '5. Go to "OAuth2" → "URL Generator"\n' +
       '   • Scopes: bot\n' +
       '   • Permissions: Send Messages, Read Message History, View Channels\n' +
-      '6. Copy the generated URL and open it to invite the bot to your server',
+      '6. Copy the generated URL and open it to invite the bot to your server\n' +
+      '7. In Discord: Settings → Advanced → Developer Mode → ON\n' +
+      '8. Right-click your server → "Copy Server ID"\n' +
+      '9. Right-click your primary channel → "Copy Channel ID"',
       'Discord Setup'
     );
 
@@ -815,30 +818,22 @@ async function stepChannels(config: OnboardConfig, env: Record<string, string>):
       }
     }
 
-    const dmPolicy = await p.select({
-      message: 'Discord: Who can message the bot?',
-      options: [
-        { value: 'pairing', label: 'Pairing (recommended)', hint: 'Requires CLI approval' },
-        { value: 'allowlist', label: 'Allowlist only', hint: 'Specific user IDs' },
-        { value: 'open', label: 'Open', hint: 'Anyone (not recommended)' },
-      ],
-      initialValue: config.discord.dmPolicy || 'pairing',
+    const guildId = await p.text({
+      message: 'Discord Server (Guild) ID',
+      placeholder: '123456789012345678',
+      initialValue: config.discord.guildId || '',
     });
-    if (!p.isCancel(dmPolicy)) {
-      config.discord.dmPolicy = dmPolicy as 'pairing' | 'allowlist' | 'open';
+    if (!p.isCancel(guildId) && guildId) {
+      config.discord.guildId = guildId;
+    }
 
-      if (dmPolicy === 'pairing') {
-        p.log.info('Users will get a code. Approve with: lettabot pairing approve discord CODE');
-      } else if (dmPolicy === 'allowlist') {
-        const users = await p.text({
-          message: 'Allowed Discord user IDs (comma-separated)',
-          placeholder: '123456789012345678,987654321098765432',
-          initialValue: config.discord.allowedUsers?.join(',') || '',
-        });
-        if (!p.isCancel(users) && users) {
-          config.discord.allowedUsers = users.split(',').map(s => s.trim()).filter(Boolean);
-        }
-      }
+    const channelId = await p.text({
+      message: 'Discord Primary Channel ID (reply to all)',
+      placeholder: '123456789012345678',
+      initialValue: config.discord.channelId || '',
+    });
+    if (!p.isCancel(channelId) && channelId) {
+      config.discord.channelId = channelId;
     }
   }
   
@@ -1325,7 +1320,8 @@ export async function onboard(options?: { nonInteractive?: boolean }): Promise<v
     
     if (config.discord.enabled) {
       console.log(`  Discord: enabled`);
-      console.log(`    DM Policy: ${config.discord.dmPolicy}${!process.env.DISCORD_DM_POLICY ? ' (default)' : ''}`);
+      console.log(`    Guild ID: ${config.discord.guildId || '(missing)'}`);
+      console.log(`    Primary Channel ID: ${config.discord.channelId || '(missing)'}`);
     }
     
     if (config.whatsapp.enabled) {
@@ -1382,9 +1378,23 @@ export async function onboard(options?: { nonInteractive?: boolean }): Promise<v
       console.error('   Telegram:  export TELEGRAM_BOT_TOKEN="..." (from @BotFather)');
       console.error('   Slack:     export SLACK_BOT_TOKEN="..." and SLACK_APP_TOKEN="..."');
       console.error('   Discord:   export DISCORD_BOT_TOKEN="..."');
+      console.error('              export DISCORD_GUILD_ID="..."');
+      console.error('              export DISCORD_CHANNEL_ID="..."');
       console.error('   WhatsApp:  export WHATSAPP_ENABLED=true and WHATSAPP_SELF_CHAT_MODE=true');
       console.error('   Signal:    export SIGNAL_PHONE_NUMBER="+1234567890"');
       process.exit(1);
+    }
+
+    if (config.discord.enabled) {
+      const hasGuildId = !!config.discord.guildId;
+      const hasChannelId = !!config.discord.channelId;
+      if (!hasGuildId || !hasChannelId) {
+        console.error('❌ Error: Discord enabled but missing DISCORD_GUILD_ID or DISCORD_CHANNEL_ID');
+        console.error('');
+        console.error('   export DISCORD_GUILD_ID="..."');
+        console.error('   export DISCORD_CHANNEL_ID="..."');
+        process.exit(1);
+      }
     }
     
     // CRITICAL: Validate WhatsApp self-chat is explicitly set
@@ -1474,8 +1484,8 @@ export async function onboard(options?: { nonInteractive?: boolean }): Promise<v
     discord: {
       enabled: existingConfig.channels.discord?.enabled || false,
       token: existingConfig.channels.discord?.token,
-      dmPolicy: existingConfig.channels.discord?.dmPolicy,
-      allowedUsers: existingConfig.channels.discord?.allowedUsers,
+      guildId: existingConfig.channels.discord?.guildId,
+      channelId: existingConfig.channels.discord?.channelId,
     },
     whatsapp: { 
       enabled: existingConfig.channels.whatsapp?.enabled || false,
@@ -1528,6 +1538,16 @@ export async function onboard(options?: { nonInteractive?: boolean }): Promise<v
   
   // Review loop
   await reviewLoop(config, env);
+
+  if (config.discord.enabled) {
+    const hasGuildId = !!config.discord.guildId;
+    const hasChannelId = !!config.discord.channelId;
+    if (!hasGuildId || !hasChannelId) {
+      p.log.error('Discord requires both a guild ID and primary channel ID.');
+      p.cancel('Setup cancelled');
+      process.exit(1);
+    }
+  }
   
   // Apply config to env
   if (config.agentName) env.AGENT_NAME = config.agentName;
@@ -1563,16 +1583,12 @@ export async function onboard(options?: { nonInteractive?: boolean }): Promise<v
 
   if (config.discord.enabled && config.discord.token) {
     env.DISCORD_BOT_TOKEN = config.discord.token;
-    if (config.discord.dmPolicy) env.DISCORD_DM_POLICY = config.discord.dmPolicy;
-    if (config.discord.allowedUsers?.length) {
-      env.DISCORD_ALLOWED_USERS = config.discord.allowedUsers.join(',');
-    } else {
-      delete env.DISCORD_ALLOWED_USERS;
-    }
+    if (config.discord.guildId) env.DISCORD_GUILD_ID = config.discord.guildId;
+    if (config.discord.channelId) env.DISCORD_CHANNEL_ID = config.discord.channelId;
   } else {
     delete env.DISCORD_BOT_TOKEN;
-    delete env.DISCORD_DM_POLICY;
-    delete env.DISCORD_ALLOWED_USERS;
+    delete env.DISCORD_GUILD_ID;
+    delete env.DISCORD_CHANNEL_ID;
   }
   
   if (config.whatsapp.enabled) {
@@ -1638,7 +1654,7 @@ export async function onboard(options?: { nonInteractive?: boolean }): Promise<v
     'Channels:',
     config.telegram.enabled ? `  ✓ Telegram (${formatAccess(config.telegram.dmPolicy, config.telegram.allowedUsers)})` : '  ✗ Telegram',
     config.slack.enabled ? `  ✓ Slack ${config.slack.allowedUsers?.length ? `(${config.slack.allowedUsers.length} allowed users)` : '(workspace access)'}` : '  ✗ Slack',
-    config.discord.enabled ? `  ✓ Discord (${formatAccess(config.discord.dmPolicy, config.discord.allowedUsers)})` : '  ✗ Discord',
+    config.discord.enabled ? `  ✓ Discord (guild ${config.discord.guildId || 'unset'}, primary ${config.discord.channelId || 'unset'})` : '  ✗ Discord',
     config.whatsapp.enabled ? `  ✓ WhatsApp (${formatAccess(config.whatsapp.dmPolicy, config.whatsapp.allowedUsers)})` : '  ✗ WhatsApp',
     config.signal.enabled ? `  ✓ Signal (${formatAccess(config.signal.dmPolicy, config.signal.allowedUsers)})` : '  ✗ Signal',
     '',
@@ -1685,8 +1701,8 @@ export async function onboard(options?: { nonInteractive?: boolean }): Promise<v
         discord: {
           enabled: true,
           token: config.discord.token,
-          dmPolicy: config.discord.dmPolicy,
-          allowedUsers: config.discord.allowedUsers,
+          guildId: config.discord.guildId,
+          channelId: config.discord.channelId,
         }
       } : {}),
       ...(config.whatsapp.enabled ? {

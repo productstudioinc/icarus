@@ -243,7 +243,7 @@ async function pruneAttachmentsDir(baseDir: string, maxAgeDays: number): Promise
 // Skills are installed to agent-scoped directory when agent is created (see core/bot.ts)
 
 // Configuration from environment
-const config = {
+let config = {
   workingDir: process.env.WORKING_DIR || '/tmp/lettabot',
   model: process.env.MODEL, // e.g., 'claude-sonnet-4-20250514'
   allowedTools: (process.env.ALLOWED_TOOLS || 'Bash,Read,Edit,Write,Glob,Grep,Task,web_search,conversation_search').split(','),
@@ -283,8 +283,8 @@ const config = {
   discord: {
     enabled: !!process.env.DISCORD_BOT_TOKEN,
     token: process.env.DISCORD_BOT_TOKEN || '',
-    dmPolicy: (process.env.DISCORD_DM_POLICY || 'pairing') as 'pairing' | 'allowlist' | 'open',
-    allowedUsers: process.env.DISCORD_ALLOWED_USERS?.split(',').filter(Boolean) || [],
+    guildId: process.env.DISCORD_GUILD_ID || '',
+    channelId: process.env.DISCORD_CHANNEL_ID || '',
   },
   
   // Cron
@@ -309,10 +309,20 @@ const config = {
   },
 };
 
+if (config.discord.enabled) {
+  const hasGuildId = config.discord.guildId.length > 0;
+  const hasChannelId = config.discord.channelId.length > 0;
+  if (!hasGuildId || !hasChannelId) {
+    console.error('\n  Error: Discord enabled but missing DISCORD_GUILD_ID or DISCORD_CHANNEL_ID.');
+    console.error('  Set both to scope the bot to a guild and primary channel.\n');
+    config.discord.enabled = false;
+  }
+}
+
 // Validate at least one channel is configured
 if (!config.telegram.enabled && !config.slack.enabled && !config.whatsapp.enabled && !config.signal.enabled && !config.discord.enabled) {
   console.error('\n  Error: No channels configured.');
-  console.error('  Set TELEGRAM_BOT_TOKEN, SLACK_BOT_TOKEN+SLACK_APP_TOKEN, WHATSAPP_ENABLED=true, SIGNAL_PHONE_NUMBER, or DISCORD_BOT_TOKEN\n');
+  console.error('  Set TELEGRAM_BOT_TOKEN, SLACK_BOT_TOKEN+SLACK_APP_TOKEN, WHATSAPP_ENABLED=true, SIGNAL_PHONE_NUMBER, or DISCORD_BOT_TOKEN+DISCORD_GUILD_ID+DISCORD_CHANNEL_ID\n');
   process.exit(1);
 }
 
@@ -424,8 +434,8 @@ async function main() {
   if (config.discord.enabled) {
     const discord = new DiscordAdapter({
       token: config.discord.token,
-      dmPolicy: config.discord.dmPolicy,
-      allowedUsers: config.discord.allowedUsers.length > 0 ? config.discord.allowedUsers : undefined,
+      guildId: config.discord.guildId,
+      channelId: config.discord.channelId,
       attachmentsDir,
       attachmentsMaxBytes: config.attachmentsMaxBytes,
     });

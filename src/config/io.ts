@@ -138,11 +138,11 @@ export function configToEnv(config: LettaBotConfig): Record<string, string> {
   }
   if (config.channels.discord?.token) {
     env.DISCORD_BOT_TOKEN = config.channels.discord.token;
-    if (config.channels.discord.dmPolicy) {
-      env.DISCORD_DM_POLICY = config.channels.discord.dmPolicy;
+    if (config.channels.discord.guildId) {
+      env.DISCORD_GUILD_ID = config.channels.discord.guildId;
     }
-    if (config.channels.discord.allowedUsers?.length) {
-      env.DISCORD_ALLOWED_USERS = config.channels.discord.allowedUsers.join(',');
+    if (config.channels.discord.channelId) {
+      env.DISCORD_CHANNEL_ID = config.channels.discord.channelId;
     }
   }
   

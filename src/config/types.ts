@@ -105,8 +105,8 @@ export interface SignalConfig {
 export interface DiscordConfig {
   enabled: boolean;
   token?: string;
-  dmPolicy?: 'pairing' | 'allowlist' | 'open';
-  allowedUsers?: string[];
+  guildId?: string;
+  channelId?: string;
 }
 
 export interface GoogleConfig {
