@@ -2,6 +2,9 @@
   "name": "lettabot",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "main": "dist/main.js",
   "bin": {
     "lettabot": "./dist/cli.js",
