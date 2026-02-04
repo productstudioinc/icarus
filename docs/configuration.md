@@ -41,8 +41,7 @@ channels:
   discord:
     enabled: true
     token: "..."
-    guildId: "123456789012345678"
-    channelId: "123456789012345678"
+    dmPolicy: pairing
 
   whatsapp:
     enabled: true
@@ -108,7 +107,7 @@ docker run -v ~/.letta/.persist/pgdata:/var/lib/postgresql/data \
 
 ## Channel Configuration
 
-Most channels share these common options (Discord uses guild/channel scoping instead of DM policies):
+All channels share these common options:
 
 | Option | Type | Description |
 |--------|------|-------------|
@@ -118,10 +117,12 @@ Most channels share these common options (Discord uses guild/channel scoping ins
 
 ### DM Policies
 
-Used by Telegram/WhatsApp/Signal (Discord uses guild/channel scoping instead).
+**Note:** For WhatsApp/Signal with `selfChat: true` (personal number), dmPolicy is ignored - only you can message via "Message Yourself" / "Note to Self".
 
-- **`pairing`** (recommended): New users get a code, approve with `lettabot pairing approve`
-- **`allowlist`**: Only specified user IDs can message
+For dedicated bot numbers (`selfChat: false`), onboarding defaults to **allowlist**:
+
+- **`allowlist`** (default for dedicated numbers): Only specified phone numbers can message
+- **`pairing`**: New users get a code, approve with `lettabot pairing approve`
 - **`open`**: Anyone can message (not recommended)
 
 ### Channel-Specific Options
@@ -141,13 +142,6 @@ Used by Telegram/WhatsApp/Signal (Discord uses guild/channel scoping instead).
 | Option | Type | Description |
 |--------|------|-------------|
 | `token` | string | Bot token from Discord Developer Portal |
-| `guildId` | string | Discord server (guild) ID |
-| `channelId` | string | Primary channel ID (reply to all) |
-
-Behavior:
-- Primary channel: replies to all messages
-- Other channels in the same guild: replies only when mentioned or replied to
-- DMs: disabled
 
 #### WhatsApp
 | Option | Type | Description |
@@ -219,8 +213,6 @@ Environment variables override config file values:
 | `SLACK_BOT_TOKEN` | `channels.slack.botToken` |
 | `SLACK_APP_TOKEN` | `channels.slack.appToken` |
 | `DISCORD_BOT_TOKEN` | `channels.discord.token` |
-| `DISCORD_GUILD_ID` | `channels.discord.guildId` |
-| `DISCORD_CHANNEL_ID` | `channels.discord.channelId` |
 | `WHATSAPP_ENABLED` | `channels.whatsapp.enabled` |
 | `WHATSAPP_SELF_CHAT_MODE` | `channels.whatsapp.selfChat` |
 | `SIGNAL_PHONE_NUMBER` | `channels.signal.phone` |

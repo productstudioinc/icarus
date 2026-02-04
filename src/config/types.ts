@@ -92,6 +92,10 @@ export interface WhatsAppConfig {
   selfChat?: boolean;
   dmPolicy?: 'pairing' | 'allowlist' | 'open';
   allowedUsers?: string[];
+  groupPolicy?: 'open' | 'disabled' | 'allowlist';
+  groupAllowFrom?: string[];
+  mentionPatterns?: string[];
+  groups?: Record<string, { requireMention?: boolean }>;
 }
 
 export interface SignalConfig {

@@ -28,10 +28,11 @@ import type {
   BaileysDisconnectReasonType,
   MessagesUpsertData,
 } from "./types.js";
+import type { GroupMetadata, WAMessageKey } from '@whiskeysockets/baileys';
 import type { CredsSaveQueue } from "../../utils/creds-queue.js";
 
 // Session management
-import { createWaSocket, type SocketResult } from "./session.js";
+import { createWaSocket, installConsoleFilters, type SocketResult } from "./session.js";
 
 // Inbound message handling
 import { extractInboundMessage } from "./inbound/extract.js";
@@ -39,6 +40,7 @@ import {
   checkInboundAccess,
   formatPairingMessage,
 } from "./inbound/access-control.js";
+import { applyGroupGating } from "./inbound/group-gating.js";
 
 // Outbound message handling
 import {
@@ -116,6 +118,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
   private sock: BaileysSocket | null = null;
   private DisconnectReason: BaileysDisconnectReasonType | null = null;
   private myJid: string = "";
+  private myLid: string = "";  // Linked Device ID (for Business/multi-device mentions)
   private myNumber: string = "";
 
   // LID mapping for message sending
@@ -241,6 +244,9 @@ export class WhatsAppAdapter implements ChannelAdapter {
 
   async start(): Promise<void> {
     if (this.running) return;
+
+    // Suppress Baileys crypto noise from console
+    installConsoleFilters();
 
     this.running = true;
     this.reconnectState.abortController = new AbortController();
@@ -466,6 +472,7 @@ export class WhatsAppAdapter implements ChannelAdapter {
     this.sock = result.sock;
     this.DisconnectReason = result.DisconnectReason;
     this.myJid = result.myJid;
+    this.myLid = result.myLid;
     this.myNumber = result.myNumber;
     this.credsSaveQueue = result.credsQueue;
 
@@ -478,6 +485,16 @@ export class WhatsAppAdapter implements ChannelAdapter {
     // Start watchdog and crypto error handler
     this.startWatchdog();
     this.registerCryptoErrorHandler();
+  }
+
+  /**
+   * Get group metadata with caching (uses existing groupMetaCache).
+   */
+  private async getGroupMetadata(groupJid: string): Promise<GroupMetadata> {
+    if (!this.sock) {
+      throw new Error('Socket not connected');
+    }
+    return await this.sock.groupMetadata(groupJid);
   }
 
   /**
@@ -574,11 +591,8 @@ export class WhatsAppAdapter implements ChannelAdapter {
         continue;
       }
 
-      // Deduplicate using TTL cache
+      // Build dedupe key (but don't check yet - wait until after extraction succeeds)
       const dedupeKey = `whatsapp:${remoteJid}:${messageId}`;
-      if (this.dedupeCache.check(dedupeKey)) {
-        continue; // Duplicate message - skip
-      }
 
       // Detect self-chat
       const isSelfChat = isSelfChatMessage(
@@ -608,20 +622,39 @@ export class WhatsAppAdapter implements ChannelAdapter {
       // Type safety: Socket must be available
       if (!this.sock) continue;
 
-      // Extract message using module
-      const extracted = await extractInboundMessage(
-        m,
-        this.sock,
-        this.groupMetaCache,
-        // Pass attachment config if enabled
-        this.attachmentsDir && this.downloadContentFromMessage ? {
-          downloadContentFromMessage: this.downloadContentFromMessage,
-          attachmentsDir: this.attachmentsDir,
-          attachmentsMaxBytes: this.attachmentsMaxBytes,
-        } : undefined
-      );
+      // CRITICAL: Extract message BEFORE deduplication
+      // This allows failed messages (Bad MAC, decryption errors) to retry after session renegotiation
+      let extracted;
+      try {
+        extracted = await extractInboundMessage(
+          m,
+          this.sock,
+          this.groupMetaCache,
+          // Pass attachment config if enabled
+          this.attachmentsDir && this.downloadContentFromMessage ? {
+            downloadContentFromMessage: this.downloadContentFromMessage,
+            attachmentsDir: this.attachmentsDir,
+            attachmentsMaxBytes: this.attachmentsMaxBytes,
+          } : undefined
+        );
+      } catch (err) {
+        // Extraction threw error (e.g., Bad MAC during session renegotiation)
+        // Skip without marking as seen → WhatsApp will retry after session fix
+        continue;
+      }
 
-      if (!extracted) continue; // No text or invalid message
+      if (!extracted) {
+        // Extraction returned null (no text, invalid format, or decryption failure)
+        // Skip without marking as seen → allows retry on next attempt
+        continue;
+      }
+
+      // Deduplicate ONLY after successful extraction
+      // Why: If we dedupe first, failed messages get marked as "seen" and are lost forever
+      // With this order: Failed messages can retry after WhatsApp renegotiates the session
+      if (this.dedupeCache.check(dedupeKey)) {
+        continue; // Duplicate message - skip
+      }
 
       const { body, from, chatId, pushName, senderE164, chatType, isSelfChat: isExtractedSelfChat } = extracted;
       const userId = normalizePhoneForStorage(from);
@@ -660,6 +693,10 @@ export class WhatsAppAdapter implements ChannelAdapter {
           allowedUsers: this.config.allowedUsers,
           selfChatMode: this.config.selfChatMode,
           sock: this.sock,
+          // Group policy parameters
+          senderE164: extracted.senderE164,
+          groupPolicy: this.config.groupPolicy,
+          groupAllowFrom: this.config.groupAllowFrom,
         });
 
         if (!access.allowed) {
@@ -672,6 +709,46 @@ export class WhatsAppAdapter implements ChannelAdapter {
           continue;
         }
       }
+
+      // For Business accounts, extract LID from group participants if not already known
+      if (isGroup && !this.myLid && this.sock) {
+        try {
+          const groupMetadata = await this.getGroupMetadata(remoteJid);
+          const botParticipant = groupMetadata.participants?.find((p: any) =>
+            p.jid?.includes(this.myNumber)
+          );
+          if (botParticipant?.lid) {
+            this.myLid = botParticipant.lid;
+            console.log(`[WhatsApp] Discovered bot LID from group participants`);
+          }
+        } catch (err) {
+          console.warn('[WhatsApp] Could not fetch group metadata for LID extraction:', err);
+        }
+      }
+
+      // Apply group gating (mention detection + allowlist)
+      let wasMentioned = false;
+      if (isGroup) {
+        const gatingResult = applyGroupGating({
+          msg: extracted,
+          groupJid: remoteJid,
+          selfJid: this.myJid,
+          selfLid: this.myLid,
+          selfE164: this.myNumber,
+          groupsConfig: this.config.groups,
+          mentionPatterns: this.config.mentionPatterns,
+        });
+
+        if (!gatingResult.shouldProcess) {
+          console.log(`[WhatsApp] Group message skipped: ${gatingResult.reason}`);
+          continue;
+        }
+
+        wasMentioned = gatingResult.wasMentioned ?? false;
+      }
+
+      // Set mention status for agent context
+      extracted.wasMentioned = wasMentioned;
 
       // Skip auto-reply for history messages
       const isHistory = type === "append";
@@ -697,6 +774,10 @@ export class WhatsAppAdapter implements ChannelAdapter {
           text: body,
           timestamp: extracted.timestamp,
           isGroup,
+          groupName: extracted.groupSubject,
+          wasMentioned: extracted.wasMentioned,
+          replyToUser: extracted.replyContext?.senderE164,
+          attachments: extracted.attachments,
         });
       }
     }
@@ -805,9 +886,9 @@ export class WhatsAppAdapter implements ChannelAdapter {
           ? reason.message
           : String(reason ?? "").slice(0, 200);
 
-      // Just log - these are normal Signal Protocol session renegotiations
+      // Silently ignore - these are normal Signal Protocol session renegotiations
       // Forcing reconnect would destroy session keys and cause "Waiting for this message" errors
-      console.log("[WhatsApp] Signal Protocol renegotiation (normal):", errorStr);
+      // No logging needed - this is just crypto noise
 
       // Don't call forceDisconnect() - let Baileys handle it internally
     };

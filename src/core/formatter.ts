@@ -1,11 +1,12 @@
 /**
  * Message Envelope Formatter
- * 
+ *
  * Formats incoming messages with metadata context for the agent.
  * Based on moltbot's envelope pattern.
  */
 
 import type { InboundMessage } from './types.js';
+import { normalizePhoneForStorage } from '../utils/phone.js';
 
 /**
  * Channel format hints - tells the agent what formatting syntax to use
@@ -193,22 +194,38 @@ export function formatMessageEnvelope(
   if (msg.messageId) {
     parts.push(`msg:${msg.messageId}`);
   }
-  
-  // Group name (if group chat and enabled)
-  if (opts.includeGroup !== false && msg.isGroup && msg.groupName?.trim()) {
-    // Format group name with # for Slack/Discord channels
-    if ((msg.channel === 'slack' || msg.channel === 'discord') && !msg.groupName.startsWith('#')) {
-      parts.push(`#${msg.groupName}`);
-    } else {
-      parts.push(msg.groupName);
+
+  // Group context (if group chat)
+  if (msg.isGroup && opts.includeGroup !== false) {
+    // Group name with GROUP: prefix for WhatsApp
+    if (msg.groupName?.trim()) {
+      if (msg.channel === 'whatsapp') {
+        parts.push(`GROUP:"${msg.groupName}"`);
+      } else if ((msg.channel === 'slack' || msg.channel === 'discord') && !msg.groupName.startsWith('#')) {
+        parts.push(`#${msg.groupName}`);
+      } else {
+        parts.push(msg.groupName);
+      }
+    }
+
+    // @mentioned tag (if bot was mentioned)
+    if (msg.wasMentioned) {
+      parts.push('@mentioned');
     }
   }
-  
+
   // Sender
   if (opts.includeSender !== false) {
     parts.push(formatSender(msg));
   }
-  
+
+  // Reply context (if replying to someone)
+  if (msg.replyToUser) {
+    const normalizedReply = normalizePhoneForStorage(msg.replyToUser);
+    const formattedReply = formatPhoneNumber(normalizedReply);
+    parts.push(`via ${formattedReply}`);
+  }
+
   // Timestamp
   const timestamp = formatTimestamp(msg.timestamp, opts);
   parts.push(timestamp);

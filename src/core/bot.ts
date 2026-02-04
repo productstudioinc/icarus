@@ -4,7 +4,7 @@
  * Single agent, single conversation - chat continues across all channels.
  */
 
-import { createSession, resumeSession, type Session } from '@letta-ai/letta-code-sdk';
+import { createAgent, createSession, resumeSession, type Session } from '@letta-ai/letta-code-sdk';
 import { mkdirSync } from 'node:fs';
 import type { ChannelAdapter } from '../channels/types.js';
 import type { BotConfig, InboundMessage, TriggerContext } from './types.js';
@@ -14,6 +14,7 @@ import { installSkillsToAgent } from '../skills/loader.js';
 import { formatMessageEnvelope } from './formatter.js';
 import { loadMemoryBlocks } from './memory.js';
 import { SYSTEM_PROMPT } from './system-prompt.js';
+import { StreamWatchdog } from './stream-watchdog.js';
 
 export class LettaBot {
   private store: Store;
@@ -184,12 +185,11 @@ export class LettaBot {
     let session: Session;
     let usedDefaultConversation = false;
     let usedSpecificConversation = false;
-    // Base options for all sessions (model only included for new agents)
+    // Base options for sessions (systemPrompt/memory set via createAgent for new agents)
     const baseOptions = {
       permissionMode: 'bypassPermissions' as const,
       allowedTools: this.config.allowedTools,
       cwd: this.config.workingDir,
-      systemPrompt: SYSTEM_PROMPT,
       // bypassPermissions mode auto-allows all tools, no canUseTool callback needed
     };
     
@@ -210,7 +210,12 @@ export class LettaBot {
       } else {
         // Create new agent with default conversation
         console.log('[Bot] Creating new agent');
-        session = createSession(undefined, { ...baseOptions, model: this.config.model, memory: loadMemoryBlocks(this.config.agentName) });
+        const newAgentId = await createAgent({
+          model: this.config.model,
+          systemPrompt: SYSTEM_PROMPT,
+          memory: loadMemoryBlocks(this.config.agentName),
+        });
+        session = createSession(newAgentId, baseOptions);
       }
       console.log('[Bot] Session created/resumed');
       
@@ -232,7 +237,6 @@ export class LettaBot {
           clearTimeout(timeoutId!);
         }
       };
-
       let initInfo;
       try {
         initInfo = await withTimeout(session.initialize(), 'Session initialize');
@@ -254,6 +258,10 @@ export class LettaBot {
           throw error;
         }
       }
+      if (initInfo.conversationId && initInfo.conversationId !== this.store.conversationId) {
+        this.store.conversationId = initInfo.conversationId;
+        console.log('[Bot] Saved conversation ID:', initInfo.conversationId);
+      }
 
       // Send message to agent with metadata envelope
       const formattedMessage = formatMessageEnvelope(msg);
@@ -271,6 +279,21 @@ export class LettaBot {
       let lastMsgType: string | null = null;
       let lastAssistantUuid: string | null = null;
       let sentAnyMessage = false;
+      
+      // Stream watchdog - abort if idle for too long
+      const watchdog = new StreamWatchdog({
+        onAbort: () => {
+          session.abort().catch((err) => {
+            console.error('[Bot] Stream abort failed:', err);
+          });
+          try {
+            session.close();
+          } catch (err) {
+            console.error('[Bot] Stream close failed:', err);
+          }
+        },
+      });
+      watchdog.start();
       
       // Helper to finalize and send current accumulated response
       const finalizeMessage = async () => {
@@ -302,6 +325,7 @@ export class LettaBot {
       try {
         for await (const streamMsg of session.stream()) {
           const msgUuid = (streamMsg as any).uuid;
+          watchdog.ping();
           
           // When message type changes, finalize the current message
           // This ensures different message types appear as separate bubbles
@@ -349,6 +373,14 @@ export class LettaBot {
           }
           
           if (streamMsg.type === 'result') {
+            // Check for corrupted conversation (empty result usually means error)
+            const resultMsg = streamMsg as { result?: string; success?: boolean };
+            if (resultMsg.success && resultMsg.result === '' && !response.trim()) {
+              console.error('[Bot] Warning: Agent returned empty result with no response.');
+              console.error('[Bot] This often indicates a corrupted conversation.');
+              console.error('[Bot] Try running: lettabot reset-conversation');
+            }
+            
             // Save agent ID and conversation ID
             if (session.agentId && session.agentId !== this.store.agentId) {
               const isNewAgent = !this.store.agentId;
@@ -372,8 +404,10 @@ export class LettaBot {
             }
             break;
           }
+
         }
       } finally {
+        watchdog.stop();
         clearInterval(typingInterval);
       }
       
@@ -428,12 +462,36 @@ export class LettaBot {
     text: string,
     _context?: TriggerContext
   ): Promise<string> {
-    // Base options (model only for new agents)
+    // Wait for any in-progress message processing to complete
+    // This prevents 409 conflicts when heartbeats overlap with user messages
+    while (this.processing) {
+      console.log('[Bot] Waiting for message queue to finish before sendToAgent...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // Mark as processing to prevent queue from starting
+    this.processing = true;
+    console.log('[Bot] sendToAgent acquired processing lock');
+    
+    try {
+      return await this._sendToAgentInternal(text, _context);
+    } finally {
+      this.processing = false;
+      console.log('[Bot] sendToAgent released processing lock');
+      // Trigger queue processing in case messages arrived while we were busy
+      this.processQueue();
+    }
+  }
+  
+  private async _sendToAgentInternal(
+    text: string,
+    _context?: TriggerContext
+  ): Promise<string> {
+    // Base options for sessions (systemPrompt/memory set via createAgent for new agents)
     const baseOptions = {
       permissionMode: 'bypassPermissions' as const,
       allowedTools: this.config.allowedTools,
       cwd: this.config.workingDir,
-      systemPrompt: SYSTEM_PROMPT,
       // bypassPermissions mode auto-allows all tools, no canUseTool callback needed
     };
     
@@ -450,7 +508,12 @@ export class LettaBot {
       session = resumeSession(this.store.agentId, baseOptions);
     } else {
       // Create new agent with default conversation
-      session = createSession(undefined, { ...baseOptions, model: this.config.model, memory: loadMemoryBlocks(this.config.agentName) });
+      const newAgentId = await createAgent({
+        model: this.config.model,
+        systemPrompt: SYSTEM_PROMPT,
+        memory: loadMemoryBlocks(this.config.agentName),
+      });
+      session = createSession(newAgentId, baseOptions);
     }
     
     try {
@@ -499,17 +562,48 @@ export class LettaBot {
   }
   
   /**
-   * Deliver a message to a specific channel
+   * Deliver a message or file to a specific channel
    */
-  async deliverToChannel(channelId: string, chatId: string, text: string): Promise<void> {
+  async deliverToChannel(
+    channelId: string,
+    chatId: string,
+    options: {
+      text?: string;
+      filePath?: string;
+      kind?: 'image' | 'file';
+    }
+  ): Promise<string | undefined> {
     const adapter = this.channels.get(channelId);
     if (!adapter) {
       console.error(`Channel not found: ${channelId}`);
-      return;
+      throw new Error(`Channel not found: ${channelId}`);
     }
-    await adapter.sendMessage({ chatId, text });
+
+    // Send file if provided
+    if (options.filePath) {
+      if (typeof adapter.sendFile !== 'function') {
+        throw new Error(`Channel ${channelId} does not support file sending`);
+      }
+
+      const result = await adapter.sendFile({
+        chatId,
+        filePath: options.filePath,
+        caption: options.text,  // text becomes caption for files
+        kind: options.kind,
+      });
+
+      return result.messageId;
+    }
+
+    // Send text message
+    if (options.text) {
+      const result = await adapter.sendMessage({ chatId, text: options.text });
+      return result.messageId;
+    }
+
+    throw new Error('Either text or filePath must be provided');
   }
-  
+
   /**
    * Get bot status
    */
@@ -520,6 +614,13 @@ export class LettaBot {
     };
   }
   
+  /**
+   * Set agent ID (for container deploys that discover existing agents)
+   */
+  setAgentId(agentId: string): void {
+    this.store.agentId = agentId;
+    console.log(`[Bot] Agent ID set to: ${agentId}`);
+  }
   
   /**
    * Reset agent (clear memory)

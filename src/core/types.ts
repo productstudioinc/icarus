@@ -70,6 +70,8 @@ export interface InboundMessage {
   threadId?: string;      // Slack thread_ts
   isGroup?: boolean;      // Is this from a group chat?
   groupName?: string;     // Group/channel name if applicable
+  wasMentioned?: boolean; // Was bot explicitly mentioned? (groups only)
+  replyToUser?: string;   // Phone number of who they're replying to (if reply)
   attachments?: InboundAttachment[];
 }
 
