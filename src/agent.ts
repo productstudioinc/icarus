@@ -1,5 +1,5 @@
 import { Agent, type AgentEvent } from "@mariozechner/pi-agent-core";
-import { getModel, type ImageContent } from "@mariozechner/pi-ai";
+import { getModels, type ImageContent, type Model } from "@mariozechner/pi-ai";
 import {
 	AgentSession,
 	AuthStorage,
@@ -16,15 +16,27 @@ import { existsSync, readFileSync } from "fs";
 import { mkdir, writeFile } from "fs/promises";
 import { homedir } from "os";
 import { join } from "path";
-import { createMomSettingsManager, syncLogToSessionManager } from "./context.js";
+import { setupClaudeAgentSdkProxy } from "./claude-agent-sdk-proxy.js";
+import { createIcarusSettingsManager, syncLogToSessionManager } from "./context.js";
 import * as log from "./log.js";
 import { createExecutor, type SandboxConfig } from "./sandbox.js";
 import type { ChannelInfo, SlackContext, UserInfo } from "./slack.js";
 import type { ChannelStore } from "./store.js";
-import { createMomTools, setUploadFunction } from "./tools/index.js";
+import { createIcarusTools, setUploadFunction } from "./tools/index.js";
 
-// Hardcoded model for now - TODO: make configurable (issue #63)
-const model = getModel("anthropic", "claude-sonnet-4-5");
+const llmBackend = process.env.ICARUS_LLM_BACKEND === "claude-agent-sdk" ? "claude-agent-sdk" : "anthropic";
+const llmModelId = process.env.ICARUS_MODEL_ID || "claude-sonnet-4-5";
+
+function resolveModel(): Model<any> {
+	if (llmBackend === "claude-agent-sdk") {
+		return setupClaudeAgentSdkProxy({ modelId: llmModelId });
+	}
+
+	const anthropicModels = getModels("anthropic");
+	return anthropicModels.find((candidate) => candidate.id === llmModelId) ?? anthropicModels[0];
+}
+
+const model = resolveModel();
 
 export interface PendingMessage {
 	userName: string;
@@ -48,7 +60,7 @@ async function getAnthropicApiKey(authStorage: AuthStorage): Promise<string> {
 		throw new Error(
 			"No API key found for anthropic.\n\n" +
 				"Set an API key environment variable, or use /login with Anthropic and link to auth.json from " +
-				join(homedir(), ".pi", "mom", "auth.json"),
+				join(homedir(), ".pi", "icarus", "auth.json"),
 		);
 	}
 	return key;
@@ -102,7 +114,7 @@ function getMemory(channelDir: string): string {
 	return parts.join("\n\n");
 }
 
-function loadMomSkills(channelDir: string, workspacePath: string): Skill[] {
+function loadIcarusSkills(channelDir: string, workspacePath: string): Skill[] {
 	const skillMap = new Map<string, Skill>();
 
 	// channelDir is the host path (e.g., /Users/.../data/C0A34FL8PMH)
@@ -167,7 +179,7 @@ function buildSystemPrompt(
 - Bash working directory: ${process.cwd()}
 - Be careful with system modifications`;
 
-	return `You are mom, a Slack bot assistant. Be concise. No emojis.
+	return `You are icarus, a Slack bot assistant. Be concise. No emojis.
 
 ## Context
 - For current date/time, use: date
@@ -413,22 +425,22 @@ function createRunner(sandboxConfig: SandboxConfig, channelId: string, channelDi
 	const workspacePath = executor.getWorkspacePath(channelDir.replace(`/${channelId}`, ""));
 
 	// Create tools
-	const tools = createMomTools(executor);
+	const tools = createIcarusTools(executor);
 
 	// Initial system prompt (will be updated each run with fresh memory/channels/users/skills)
 	const memory = getMemory(channelDir);
-	const skills = loadMomSkills(channelDir, workspacePath);
+	const skills = loadIcarusSkills(channelDir, workspacePath);
 	const systemPrompt = buildSystemPrompt(workspacePath, channelId, memory, sandboxConfig, [], [], skills);
 
 	// Create session manager and settings manager
 	// Use a fixed context.jsonl file per channel (not timestamped like coding-agent)
 	const contextFile = join(channelDir, "context.jsonl");
 	const sessionManager = SessionManager.open(contextFile, channelDir);
-	const settingsManager = createMomSettingsManager(join(channelDir, ".."));
+	const settingsManager = createIcarusSettingsManager(join(channelDir, ".."));
 
 	// Create AuthStorage and ModelRegistry
 	// Auth stored outside workspace so agent can't access it
-	const authStorage = AuthStorage.create(join(homedir(), ".pi", "mom", "auth.json"));
+	const authStorage = AuthStorage.create(join(homedir(), ".pi", "icarus", "auth.json"));
 	const modelRegistry = new ModelRegistry(authStorage);
 
 	// Create agent
@@ -440,7 +452,7 @@ function createRunner(sandboxConfig: SandboxConfig, channelId: string, channelDi
 			tools,
 		},
 		convertToLlm,
-		getApiKey: async () => getAnthropicApiKey(authStorage),
+		getApiKey: llmBackend === "anthropic" ? async () => getAnthropicApiKey(authStorage) : undefined,
 	});
 
 	// Load existing messages
@@ -664,7 +676,7 @@ function createRunner(sandboxConfig: SandboxConfig, channelId: string, channelDi
 
 			// Update system prompt with fresh memory, channel/user info, and skills
 			const memory = getMemory(channelDir);
-			const skills = loadMomSkills(channelDir, workspacePath);
+			const skills = loadIcarusSkills(channelDir, workspacePath);
 			const systemPrompt = buildSystemPrompt(
 				workspacePath,
 				channelId,

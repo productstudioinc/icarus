@@ -10,7 +10,7 @@
 
 ### Fixed
 
-- Fixed mom startup crash caused by settings API drift by using `SettingsManager` with workspace-backed storage ([#1444](https://github.com/badlogic/pi-mono/issues/1444))
+- Fixed icarus startup crash caused by settings API drift by using `SettingsManager` with workspace-backed storage ([#1444](https://github.com/badlogic/pi-mono/issues/1444))
 
 ## [0.55.3] - 2026-02-27
 
@@ -126,7 +126,7 @@
 
 ### Fixed
 
-- Use coding-agent's SessionManager instead of custom MomSessionManager to fix API mismatch crash ([#595](https://github.com/badlogic/pi-mono/issues/595))
+- Use coding-agent's SessionManager instead of custom IcarusSessionManager to fix API mismatch crash ([#595](https://github.com/badlogic/pi-mono/issues/595))
 
 ## [0.42.4] - 2026-01-10
 
@@ -197,8 +197,8 @@
 - `AgentTool` import moved from `@mariozechner/pi-ai` to `@mariozechner/pi-agent-core`
 - `AppMessage` type renamed to `AgentMessage`
 - `Attachment` type replaced with `ImageContent` for image handling
-- `MomSessionManager.loadSession()` renamed to `buildSessionContex()`
-- `MomSessionManager.createBranchedSessionFromEntries()` signature changed to `createBranchedSession(leafId)`
+- `IcarusSessionManager.loadSession()` renamed to `buildSessionContex()`
+- `IcarusSessionManager.createBranchedSessionFromEntries()` signature changed to `createBranchedSession(leafId)`
 - `ProviderTransport` removed from Agent config, replaced with direct `getApiKey` callback
 - `messageTransformer` renamed to `convertToLlm`
 - `ANTHROPIC_API_KEY`/`ANTHROPIC_OAUTH_TOKEN` no longer checked at startup (deferred to first API call)
@@ -212,19 +212,19 @@
 
 ### Added
 
-- Support for OAuth login via coding agent's `/login` command (link `~/.pi/agent/auth.json` to `~/.pi/mom/auth.json`)
+- Support for OAuth login via coding agent's `/login` command (link `~/.pi/agent/auth.json` to `~/.pi/icarus/auth.json`)
 
 ## [0.20.2] - 2025-12-13
 
 ### Fixed
 
-- **Skill paths now use container paths**: Skill file paths in system prompt are translated to container paths (e.g., `/workspace/skills/...`) so mom can read them from inside Docker.
+- **Skill paths now use container paths**: Skill file paths in system prompt are translated to container paths (e.g., `/workspace/skills/...`) so icarus can read them from inside Docker.
 
 ## [0.20.1] - 2025-12-13
 
 ### Added
 
-- **Skills auto-discovery**: Mom now automatically discovers skills from `workspace/skills/` and `channel/skills/` directories. Skills are directories containing a `SKILL.md` file with `name` and `description` in YAML frontmatter. Available skills are listed in the system prompt with their descriptions. Mom reads the `SKILL.md` file before using a skill.
+- **Skills auto-discovery**: Icarus now automatically discovers skills from `workspace/skills/` and `channel/skills/` directories. Skills are directories containing a `SKILL.md` file with `name` and `description` in YAML frontmatter. Available skills are listed in the system prompt with their descriptions. Icarus reads the `SKILL.md` file before using a skill.
 
 ## [0.19.2] - 2025-12-12
 
@@ -237,7 +237,7 @@
 - `SlackBot.enqueueEvent()` for queueing events (max 5 per channel)
 - `[SILENT]` response marker: deletes status message, posts nothing to Slack (for periodic events with nothing to report)
 - Events documentation in `docs/events.md`
-- System prompt section explaining events to mom
+- System prompt section explaining events to icarus
 
 ## [0.18.8] - 2025-12-12
 
@@ -249,7 +249,7 @@
 
 ### Added
 
-- Timestamp prefix on user messages (`[YYYY-MM-DD HH:MM:SS]`) so mom knows current date/time
+- Timestamp prefix on user messages (`[YYYY-MM-DD HH:MM:SS]`) so icarus knows current date/time
 
 ### Fixed
 
@@ -303,7 +303,7 @@
 
 - Message handling improvements
   - Channel chatter (messages without @mention) logged but doesn't trigger processing
-  - Messages sent while mom is busy are logged and synced on next run
+  - Messages sent while icarus is busy are logged and synced on next run
   - Pre-startup messages (replayed by Slack on reconnect) logged but not auto-processed
   - Stop command executes immediately (not queued), can interrupt running tasks
   - Channel @mentions no longer double-logged (was firing both app_mention and message events)
@@ -342,10 +342,10 @@
 
 - Channel and user ID mappings in system prompt
   - Fetches all channels bot is member of and all workspace users at startup
-  - Mom can now reference channels by name and mention users properly
+  - Icarus can now reference channels by name and mention users properly
 - Skills documentation in system prompt
   - Explains custom CLI tools pattern with SKILL.md files
-  - Encourages mom to create reusable tools for recurring tasks
+  - Encourages icarus to create reusable tools for recurring tasks
 - Debug output: writes `last_prompt.txt` to channel directory with full context
 - Bash working directory info in system prompt (/ for Docker, cwd for host)
 - Token-efficient log queries that filter out tool calls/results for summaries
@@ -392,12 +392,12 @@
   - Global workspace memory (`workspace/MEMORY.md`) shared across all channels
   - Channel-specific memory (`workspace/<channel>/MEMORY.md`) for per-channel context
   - Automatic memory loading into system prompt on each request
-  - Mom can update memory files to remember project details, preferences, and context
+  - Icarus can update memory files to remember project details, preferences, and context
 - ISO 8601 date field in log.jsonl for easy date-based grepping
   - Format: `"date":"2025-11-26T10:44:00.123Z"`
   - Enables queries like: `grep '"date":"2025-11-26' log.jsonl`
 - Centralized logging system (`src/log.ts`)
-  - Structured, colored console output (green for user messages, yellow for mom activity, dim for details)
+  - Structured, colored console output (green for user messages, yellow for icarus activity, dim for details)
   - Consistent format: `[HH:MM:SS] [context] message`
   - Type-safe logging functions for all event types
 - Usage tracking and cost reporting
@@ -405,7 +405,7 @@
   - Displays summary at end of each agent run in console and Slack thread
   - Example: `💰 Usage: 12,543 in + 847 out (5,234 cache read, 127 cache write) = $0.0234`
 - Working indicator in Slack messages
-  - Channel messages show "..." while mom is processing
+  - Channel messages show "..." while icarus is processing
   - Automatically removed when work completes
 - Improved stop command behavior
   - Separate "Stopping..." message that updates to "Stopped" when abort completes
@@ -445,7 +445,7 @@
 
 ### Added
 
-- Initial release of Mom Slack bot
+- Initial release of Icarus Slack bot
 - Slack integration with @mentions and DMs
 - Docker sandbox mode for isolated execution
 - Bash tool with full shell access
@@ -453,6 +453,6 @@
 - Attach tool for sharing files in Slack
 - Thread-based tool details (clean main messages, verbose details in threads)
 - Single accumulated message per agent run
-- Stop command (`@mom stop`) to abort running tasks
+- Stop command (`@icarus stop`) to abort running tasks
 - Persistent workspace per channel with scratchpad directory
 - Streaming console output for monitoring

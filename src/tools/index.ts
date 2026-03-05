@@ -8,7 +8,7 @@ import { createWriteTool } from "./write.js";
 
 export { setUploadFunction } from "./attach.js";
 
-export function createMomTools(executor: Executor): AgentTool<any>[] {
+export function createIcarusTools(executor: Executor): AgentTool<any>[] {
 	return [
 		createReadTool(executor),
 		createBashTool(executor),

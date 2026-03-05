@@ -1,4 +1,4 @@
-# Mom Redesign: Multi-Platform Chat Support
+# Icarus Redesign: Multi-Platform Chat Support
 
 ## Goals
 
@@ -33,7 +33,7 @@ Problems:
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                              CLI / Entry Point                          │
-│  mom ./data                                                             │
+│  icarus ./data                                                             │
 │  (reads config.json, starts all configured adapters)                    │
 └───────────────────────────────────┬─────────────────────────────────────┘
                                     │
@@ -62,7 +62,7 @@ Problems:
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                              MomAgent                                   │
+│                              IcarusAgent                                   │
 │  - Platform agnostic                                                    │
 │  - Receives messages via handleMessage(message, context, onEvent)       │
 │  - Forwards AgentSessionEvent to adapter via callback                   │
@@ -138,7 +138,7 @@ interface ChannelAttachment {
 
 ### 2. PlatformAdapter
 
-Adapters handle platform connection and UI. They receive events from MomAgent and render however they want.
+Adapters handle platform connection and UI. They receive events from IcarusAgent and render however they want.
 
 ```typescript
 interface PlatformAdapter {
@@ -171,14 +171,14 @@ interface UserInfo {
 }
 ```
 
-### 3. MomAgent
+### 3. IcarusAgent
 
-MomAgent wraps `AgentSession` from coding-agent. Agent is platform-agnostic; it just forwards events to the adapter.
+IcarusAgent wraps `AgentSession` from coding-agent. Agent is platform-agnostic; it just forwards events to the adapter.
 
 ```typescript
 import { type AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 
-interface MomAgent {
+interface IcarusAgent {
   /**
    * Handle an incoming message.
    * Adapter receives events via callback and renders however it wants.
@@ -261,7 +261,7 @@ Messages stored as received from platform:
 
 ```jsonl
 {"id":"1734567890.123456","ts":"2024-12-20T10:00:00.000Z","sender":{"id":"U123","username":"mario","displayName":"Mario Z","isBot":false},"text":"<@U789> what's the weather?","attachments":[],"isMention":true}
-{"id":"1734567890.234567","ts":"2024-12-20T10:00:05.000Z","sender":{"id":"bot","username":"mom","isBot":true},"text":"The weather is sunny!","attachments":[]}
+{"id":"1734567890.234567","ts":"2024-12-20T10:00:05.000Z","sender":{"id":"bot","username":"icarus","isBot":true},"text":"The weather is sunny!","attachments":[]}
 ```
 
 ### context.jsonl (LLM Context)
@@ -328,7 +328,7 @@ data/
 
 **Events** use qualified channelId: `{"channelId": "slack-acme/C123", ...}`
 
-**Security note:** Mom has bash access to all channel logs in the workspace. If mom is in a private channel, anyone who can talk to mom could potentially access that channel's history. For true isolation, run separate mom instances with separate data directories.
+**Security note:** Icarus has bash access to all channel logs in the workspace. If icarus is in a private channel, anyone who can talk to icarus could potentially access that channel's history. For true isolation, run separate icarus instances with separate data directories.
 
 ### Channel Isolation via Bubblewrap (Linux/Docker)
 
@@ -385,7 +385,7 @@ function buildSystemPrompt(
   context: ChannelContext,
   skills: Skill[]
 ): string {
-  return `You are mom, a chat bot assistant. Be concise. No emojis.
+  return `You are icarus, a chat bot assistant. Be concise. No emojis.
 
 ## Text Formatting
 Use standard markdown: **bold**, *italic*, \`code\`, \`\`\`block\`\`\`, [text](url)
@@ -432,10 +432,10 @@ private formatForSlack(markdown: string): string {
 
 ```typescript
 // test/agent.test.ts
-import { MomAgent } from '../src/agent.js';
+import { IcarusAgent } from '../src/agent.js';
 import { createTestContainer, destroyTestContainer } from './docker-utils.js';
 
-describe('MomAgent', () => {
+describe('IcarusAgent', () => {
   let containerName: string;
   
   beforeAll(async () => {
@@ -447,7 +447,7 @@ describe('MomAgent', () => {
   });
 
   it('responds to user message', async () => {
-    const agent = new MomAgent({
+    const agent = new IcarusAgent({
       workDir: tmpDir,
       sandbox: { type: 'docker', container: containerName }
     });
@@ -519,7 +519,7 @@ describe('SlackAdapter', () => {
 
 ```typescript
 // test/integration.test.ts
-describe('Mom Integration', () => {
+describe('Icarus Integration', () => {
   let containerName: string;
   
   beforeAll(async () => {
@@ -531,14 +531,14 @@ describe('Mom Integration', () => {
   });
 
   it('end-to-end with CLI adapter', async () => {
-    const agent = new MomAgent({
+    const agent = new IcarusAgent({
       workDir: tmpDir,
       sandbox: { type: 'docker', container: containerName }
     });
     const adapter = new CLIAdapter({ agent, input: mockStdin, output: mockStdout });
     
     await adapter.start();
-    mockStdin.emit('data', 'Hello mom\n');
+    mockStdin.emit('data', 'Hello icarus\n');
     
     await waitFor(() => mockStdout.data.length > 0);
     expect(mockStdout.data).toContain('Hello');
@@ -579,9 +579,9 @@ describe('Mom Integration', () => {
 ## File Structure
 
 ```
-packages/mom/src/
+packages/icarus/src/
 ├── main.ts                    # CLI entry point
-├── agent.ts                   # MomAgent
+├── agent.ts                   # IcarusAgent
 ├── store.ts                   # ChannelStore
 ├── context.ts                 # Session management
 ├── sandbox.ts                 # Sandbox execution
@@ -605,7 +605,7 @@ packages/mom/src/
 
 ## Custom Tools (Host-Side Execution)
 
-Mom runs bash commands inside a sandbox (Docker container), but sometimes you need tools that run on the host machine (e.g., accessing host APIs, credentials, or services that can't run in the container).
+Icarus runs bash commands inside a sandbox (Docker container), but sometimes you need tools that run on the host machine (e.g., accessing host APIs, credentials, or services that can't run in the container).
 
 ### Architecture
 
@@ -613,7 +613,7 @@ Mom runs bash commands inside a sandbox (Docker container), but sometimes you ne
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                              Host Machine                               │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │                        Mom Process (Node.js)                       │  │
+│  │                        Icarus Process (Node.js)                       │  │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────────┐│  │
 │  │  │ CustomTool  │  │ CustomTool  │  │ invoke_tool (AgentTool)     ││  │
 │  │  │ gmail       │  │ calendar    │  │ - receives tool name + args ││  │
@@ -624,10 +624,10 @@ Mom runs bash commands inside a sandbox (Docker container), but sometimes you ne
 │  │                          │ execute()            │ invoke_tool()     │  │
 │  │                          │                      ▼                   │  │
 │  │  ┌───────────────────────────────────────────────────────────────┐│  │
-│  │  │                     MomAgent                                   ││  │
+│  │  │                     IcarusAgent                                   ││  │
 │  │  │  - System prompt describes all custom tools                    ││  │
 │  │  │  - Has invoke_tool as one of its tools                         ││  │
-│  │  │  - Mom calls invoke_tool("gmail", {action: "search", ...})     ││  │
+│  │  │  - Icarus calls invoke_tool("gmail", {action: "search", ...})     ││  │
 │  │  └───────────────────────────────────────────────────────────────┘│  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 │                                    │                                     │
@@ -635,7 +635,7 @@ Mom runs bash commands inside a sandbox (Docker container), but sometimes you ne
 │                                    ▼                                     │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │                     Docker Container (Sandbox)                     │  │
-│  │  - Mom's bash commands run here                                    │  │
+│  │  - Icarus's bash commands run here                                    │  │
 │  │  - Isolated from host (except mounted workspace)                   │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -645,11 +645,11 @@ Mom runs bash commands inside a sandbox (Docker container), but sometimes you ne
 
 ```typescript
 // data/tools/gmail/index.ts
-import type { MomCustomTool, ToolAPI } from "@mariozechner/pi-mom";
+import type { IcarusCustomTool, ToolAPI } from "@mariozechner/pi-icarus";
 import { Type } from "@sinclair/typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 
-const tool: MomCustomTool = {
+const tool: IcarusCustomTool = {
   name: "gmail",
   description: "Search, read, and send emails via Gmail",
   parameters: Type.Object({
@@ -688,17 +688,17 @@ const tool: MomCustomTool = {
 export default tool;
 ```
 
-### MomCustomTool Type
+### IcarusCustomTool Type
 
 ```typescript
 import type { TSchema, Static } from "@sinclair/typebox";
 
-export interface MomToolResult<TDetails = any> {
+export interface IcarusToolResult<TDetails = any> {
   content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>;
   details?: TDetails;
 }
 
-export interface MomCustomTool<TParams extends TSchema = TSchema, TDetails = any> {
+export interface IcarusCustomTool<TParams extends TSchema = TSchema, TDetails = any> {
   /** Tool name (must be unique) */
   name: string;
   
@@ -713,20 +713,20 @@ export interface MomCustomTool<TParams extends TSchema = TSchema, TDetails = any
     toolCallId: string,
     params: Static<TParams>,
     signal?: AbortSignal,
-  ) => Promise<MomToolResult<TDetails>>;
+  ) => Promise<IcarusToolResult<TDetails>>;
   
-  /** Optional: called when mom starts (for initialization) */
+  /** Optional: called when icarus starts (for initialization) */
   onStart?: () => Promise<void>;
   
-  /** Optional: called when mom stops (for cleanup) */
+  /** Optional: called when icarus stops (for cleanup) */
   onStop?: () => Promise<void>;
 }
 
 /** Factory function for tools that need async initialization */
-export type MomCustomToolFactory = (api: ToolAPI) => MomCustomTool | Promise<MomCustomTool>;
+export type IcarusCustomToolFactory = (api: ToolAPI) => IcarusCustomTool | Promise<IcarusCustomTool>;
 
 export interface ToolAPI {
-  /** Path to mom's data directory */
+  /** Path to icarus's data directory */
   dataDir: string;
   
   /** Execute a command on the host (not in sandbox) */
@@ -744,7 +744,7 @@ export interface ToolAPI {
 
 Tools are discovered from:
 1. `data/tools/**/index.ts` (workspace-local, recursive)
-2. `~/.pi/mom/tools/**/index.ts` (global, recursive)
+2. `~/.pi/icarus/tools/**/index.ts` (global, recursive)
 
 ```typescript
 // loader.ts
@@ -752,7 +752,7 @@ import { createJiti } from "jiti";
 
 interface LoadedTool {
   path: string;
-  tool: MomCustomTool;
+  tool: IcarusCustomTool;
 }
 
 async function loadCustomTools(dataDir: string): Promise<LoadedTool[]> {
@@ -762,7 +762,7 @@ async function loadCustomTools(dataDir: string): Promise<LoadedTool[]> {
   // Discover tool directories
   const toolDirs = [
     path.join(dataDir, "tools"),
-    path.join(os.homedir(), ".pi", "mom", "tools"),
+    path.join(os.homedir(), ".pi", "icarus", "tools"),
   ];
   
   for (const dir of toolDirs) {
@@ -776,7 +776,7 @@ async function loadCustomTools(dataDir: string): Promise<LoadedTool[]> {
       
       try {
         const module = await jiti.import(indexPath, { default: true });
-        const toolOrFactory = module as MomCustomTool | MomCustomToolFactory;
+        const toolOrFactory = module as IcarusCustomTool | IcarusCustomToolFactory;
         
         const tool = typeof toolOrFactory === "function"
           ? await toolOrFactory(createToolAPI(dataDir))
@@ -795,7 +795,7 @@ async function loadCustomTools(dataDir: string): Promise<LoadedTool[]> {
 
 ### The invoke_tool Agent Tool
 
-Mom has a single `invoke_tool` tool that dispatches to custom tools:
+Icarus has a single `invoke_tool` tool that dispatches to custom tools:
 
 ```typescript
 import { Type } from "@sinclair/typebox";
@@ -845,7 +845,7 @@ function createInvokeToolTool(loadedTools: LoadedTool[]): AgentTool {
 
 ### System Prompt Integration
 
-Custom tools are described in the system prompt so mom knows what's available:
+Custom tools are described in the system prompt so icarus knows what's available:
 
 ```typescript
 function formatCustomToolsForPrompt(tools: LoadedTool[]): string {
@@ -888,13 +888,13 @@ function schemaToSimpleJson(schema: TSchema): object {
 
 ```typescript
 // data/tools/gmail/index.ts
-import type { MomCustomTool, ToolAPI } from "@mariozechner/pi-mom";
+import type { IcarusCustomTool, ToolAPI } from "@mariozechner/pi-icarus";
 import { Type } from "@sinclair/typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 import Imap from "imap";
 import nodemailer from "nodemailer";
 
-export default async function(api: ToolAPI): Promise<MomCustomTool> {
+export default async function(api: ToolAPI): Promise<IcarusCustomTool> {
   // Load credentials from data directory
   const credsPath = path.join(api.dataDir, "tools", "gmail", "credentials.json");
   const creds = JSON.parse(await api.readFile(credsPath));
@@ -918,11 +918,11 @@ export default async function(api: ToolAPI): Promise<MomCustomTool> {
 
 1. **Tools run on host**: Custom tools have full host access. Only install trusted tools.
 2. **Credential storage**: Tools should store credentials in the data directory, not in code.
-3. **Sandbox separation**: The sandbox (Docker) can't access host tools directly. Only mom's invoke_tool can call them.
+3. **Sandbox separation**: The sandbox (Docker) can't access host tools directly. Only icarus's invoke_tool can call them.
 
 ### Loading
 
-Tools are loaded via jiti. They can import any 3rd party dependencies (install in the tool directory). Imports of `@mariozechner/pi-ai` and `@mariozechner/pi-mom` are aliased to the running mom bundle.
+Tools are loaded via jiti. They can import any 3rd party dependencies (install in the tool directory). Imports of `@mariozechner/pi-ai` and `@mariozechner/pi-icarus` are aliased to the running icarus bundle.
 
 **Live reload**: In dev mode, tools are watched and reloaded on change. No restart needed.
 
@@ -941,7 +941,7 @@ Channel ID is qualified with adapter name so the event watcher knows which adapt
 ### Running
 
 ```bash
-mom ./data
+icarus ./data
 ```
 
 Reads `config.json`, starts all adapters defined there.

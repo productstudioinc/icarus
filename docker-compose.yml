@@ -3,7 +3,7 @@ version: "3.9"
 services:
   redis:
     image: redis:7-alpine
-    container_name: mom-redis
+    container_name: icarus-redis
     ports:
       - "6379:6379"
     volumes:
@@ -11,9 +11,9 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     restart: unless-stopped
 
-  mom-sandbox:
+  icarus-sandbox:
     image: alpine:latest
-    container_name: mom-sandbox
+    container_name: icarus-sandbox
     command: ["tail", "-f", "/dev/null"]
     volumes:
       - ./data:/workspace

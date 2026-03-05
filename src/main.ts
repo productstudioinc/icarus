@@ -220,7 +220,7 @@ async function removeWorkingReaction(thread: any, message: any): Promise<void> {
 
 const parsedArgs = parseArgs();
 if (!parsedArgs.workingDir) {
-	console.error("Usage: mom [--sandbox=host|docker:<name>] [--port=3000] <working-directory>");
+	console.error("Usage: icarus [--sandbox=host|docker:<name>] [--port=3000] <working-directory>");
 	process.exit(1);
 }
 
@@ -257,7 +257,7 @@ const discordAdapter = createDiscordAdapter({
 });
 
 const bot = new Chat({
-	userName: "mom",
+	userName: "icarus",
 	adapters: {
 		discord: discordAdapter,
 	},

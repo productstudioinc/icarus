@@ -242,18 +242,18 @@ export function logUsageSummary(
 
 // Startup (no context needed)
 export function logStartup(workingDir: string, sandbox: string): void {
-	console.log("Starting mom bot...");
+	console.log("Starting icarus bot...");
 	console.log(`  Working directory: ${workingDir}`);
 	console.log(`  Sandbox: ${sandbox}`);
 }
 
 export function logConnected(): void {
-	console.log("⚡️ Mom bot connected and listening!");
+	console.log("⚡️ Icarus bot connected and listening!");
 	console.log("");
 }
 
 export function logDisconnected(): void {
-	console.log("Mom bot disconnected.");
+	console.log("Icarus bot disconnected.");
 }
 
 // Backfill

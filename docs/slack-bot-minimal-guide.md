@@ -125,7 +125,7 @@ const socketClient = new SocketModeClient({
 
 const webClient = new WebClient(process.env.SLACK_BOT_TOKEN);
 
-// Listen for app mentions (@mom do something)
+// Listen for app mentions (@icarus do something)
 socketClient.on('app_mention', async ({ event, ack }) => {
   try {
     // Acknowledge receipt

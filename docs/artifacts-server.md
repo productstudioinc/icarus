@@ -4,7 +4,7 @@ Share HTML files, visualizations, and interactive demos publicly via Cloudflare 
 
 ## What is it?
 
-The artifacts server lets Mom create HTML/JS/CSS files that you can instantly view in a browser, with WebSocket-based live reload for development. Perfect for dashboards, visualizations, prototypes, and interactive demos.
+The artifacts server lets Icarus create HTML/JS/CSS files that you can instantly view in a browser, with WebSocket-based live reload for development. Perfect for dashboards, visualizations, prototypes, and interactive demos.
 
 ## Installation
 
@@ -441,7 +441,7 @@ When viewing with `?ws=true`:
 
 **You:** "Create a Three.js spinning cube demo with Tailwind UI"
 
-**Mom creates:**
+**Icarus creates:**
 ```
 /workspace/artifacts/files/2025-12-14-threejs-cube/
 ├── index.html (Three.js from CDN, Tailwind from CDN)
@@ -452,7 +452,7 @@ When viewing with `?ws=true`:
 
 **You:** "Make the cube purple and add a grid"
 
-**Mom:** Edits `index.html`
+**Icarus:** Edits `index.html`
 
 **Result:** Your browser auto-reloads, showing purple cube with grid (within 1 second)
 

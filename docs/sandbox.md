@@ -1,27 +1,27 @@
-# Mom Docker Sandbox
+# Icarus Docker Sandbox
 
 ## Overview
 
-Mom can run tools either directly on the host or inside a Docker container for isolation.
+Icarus can run tools either directly on the host or inside a Docker container for isolation.
 
 ## Why Docker?
 
-When mom runs on your machine and is accessible via Slack, anyone in your workspace could potentially:
+When icarus runs on your machine and is accessible via Slack, anyone in your workspace could potentially:
 - Execute arbitrary commands on your machine
 - Access your files, credentials, etc.
 - Cause damage via prompt injection
 
-The Docker sandbox isolates mom's tools to a container where she can only access what you explicitly mount.
+The Docker sandbox isolates icarus's tools to a container where she can only access what you explicitly mount.
 
 ## Quick Start
 
 ```bash
 # 1. Create and start the container
-cd packages/mom
+cd packages/icarus
 ./docker.sh create ./data
 
-# 2. Run mom with Docker sandbox
-mom --sandbox=docker:mom-sandbox ./data
+# 2. Run icarus with Docker sandbox
+icarus --sandbox=docker:icarus-sandbox ./data
 ```
 
 ## How It Works
@@ -30,7 +30,7 @@ mom --sandbox=docker:mom-sandbox ./data
 ┌─────────────────────────────────────────────────────┐
 │  Host                                               │
 │                                                     │
-│  mom process (Node.js)                              │
+│  icarus process (Node.js)                              │
 │  ├── Slack connection                               │
 │  ├── LLM API calls                                  │
 │  └── Tool execution ──────┐                         │
@@ -43,7 +43,7 @@ mom --sandbox=docker:mom-sandbox ./data
 └─────────────────────────────────────────────────────┘
 ```
 
-- Mom process runs on host (handles Slack, LLM calls)
+- Icarus process runs on host (handles Slack, LLM calls)
 - All tool execution (`bash`, `read`, `write`, `edit`) happens inside the container
 - Only `/workspace` (your data dir) is accessible to the container
 
@@ -63,32 +63,32 @@ Use the provided script:
 Or manually:
 
 ```bash
-docker run -d --name mom-sandbox \
-  -v /path/to/mom-data:/workspace \
+docker run -d --name icarus-sandbox \
+  -v /path/to/icarus-data:/workspace \
   alpine:latest tail -f /dev/null
 ```
 
-## Mom Manages Her Own Computer
+## Icarus Manages Her Own Computer
 
-The container is treated as mom's personal computer. She can:
+The container is treated as icarus's personal computer. She can:
 
 - Install tools: `apk add github-cli git curl`
 - Configure credentials: `gh auth login`
 - Create files and directories
 - Persist state across restarts
 
-When mom needs a tool, she installs it. When she needs credentials, she asks you.
+When icarus needs a tool, she installs it. When she needs credentials, she asks you.
 
 ### Example Flow
 
 ```
-User: "@mom check the spine-runtimes repo"
-Mom:  "I need gh CLI. Installing..."
+User: "@icarus check the spine-runtimes repo"
+Icarus:  "I need gh CLI. Installing..."
       (runs: apk add github-cli)
-Mom:  "I need a GitHub token. Please provide one."
+Icarus:  "I need a GitHub token. Please provide one."
 User: "ghp_xxxx..."
-Mom:  (runs: echo "ghp_xxxx" | gh auth login --with-token)
-Mom:  "Done. Checking repo..."
+Icarus:  (runs: echo "ghp_xxxx" | gh auth login --with-token)
+Icarus:  "Done. Checking repo..."
 ```
 
 ## Persistence
@@ -105,13 +105,13 @@ To start fresh: `./docker.sh remove && ./docker.sh create ./data`
 
 ```bash
 # Run on host (default, no isolation)
-mom ./data
+icarus ./data
 
 # Run with Docker sandbox
-mom --sandbox=docker:mom-sandbox ./data
+icarus --sandbox=docker:icarus-sandbox ./data
 
 # Explicit host mode
-mom --sandbox=host ./data
+icarus --sandbox=host ./data
 ```
 
 ## Security Considerations
@@ -129,7 +129,7 @@ mom --sandbox=host ./data
 
 **For maximum security:**
 1. Create a dedicated GitHub bot account with limited repo access
-2. Only share that bot's token with mom
+2. Only share that bot's token with icarus
 3. Don't mount sensitive directories
 
 ## Troubleshooting
@@ -147,7 +147,7 @@ mom --sandbox=host ./data
 ```
 
 ### Missing tools
-Ask mom to install them, or manually:
+Ask icarus to install them, or manually:
 ```bash
-docker exec mom-sandbox apk add <package>
+docker exec icarus-sandbox apk add <package>
 ```

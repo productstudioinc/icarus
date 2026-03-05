@@ -1,12 +1,12 @@
 # Events System
 
-The events system allows mom to be triggered by scheduled or immediate events. Events are JSON files in the `workspace/events/` directory. The harness watches this directory and executes events when they become due.
+The events system allows icarus to be triggered by scheduled or immediate events. Events are JSON files in the `workspace/events/` directory. The harness watches this directory and executes events when they become due.
 
 ## Event Types
 
 ### Immediate
 
-Executes as soon as the harness discovers the file. Used by programs mom writes to signal external events (webhooks, file changes, API callbacks, etc.).
+Executes as soon as the harness discovers the file. Used by programs icarus writes to signal external events (webhooks, file changes, API callbacks, etc.).
 
 ```json
 {
@@ -47,7 +47,7 @@ Executes repeatedly on a cron schedule. Used for recurring tasks like daily summ
 }
 ```
 
-The `schedule` field uses standard cron syntax. The `timezone` field uses IANA timezone names. The file persists until explicitly deleted by mom or the program that created it.
+The `schedule` field uses standard cron syntax. The `timezone` field uses IANA timezone names. The file persists until explicitly deleted by icarus or the program that created it.
 
 #### Cron Format
 
@@ -113,7 +113,7 @@ Events integrate with the existing `ChannelQueue` in `SlackBot`:
 
 - New method: `SlackBot.enqueueEvent(event: SlackEvent)` — always queues, no "already working" rejection
 - Maximum 5 events can be queued per channel. If queue is full, discard and log to console.
-- User @mom mentions retain current behavior: rejected with "Already working" message if agent is busy
+- User @icarus mentions retain current behavior: rejected with "Already working" message if agent is busy
 
 When an event triggers:
 1. Create a synthetic `SlackEvent` with formatted message
@@ -136,9 +136,9 @@ When an event is dequeued and executes:
 
 ## Silent Completion
 
-For periodic events that check for activity (inbox, notifications, etc.), mom may find nothing to report. To avoid spamming the channel, mom can respond with just `[SILENT]`. This deletes the "Starting event..." status message and posts nothing to Slack.
+For periodic events that check for activity (inbox, notifications, etc.), icarus may find nothing to report. To avoid spamming the channel, icarus can respond with just `[SILENT]`. This deletes the "Starting event..." status message and posts nothing to Slack.
 
-Example: A periodic event checks for new emails every 15 minutes. If there are no new emails, mom responds `[SILENT]`. If there are new emails, mom posts a summary.
+Example: A periodic event checks for new emails every 15 minutes. If there are no new emails, icarus responds `[SILENT]`. If there are new emails, icarus posts a summary.
 
 ## File Naming
 
@@ -184,7 +184,7 @@ interface PeriodicEvent {
   timezone: string; // IANA timezone
 }
 
-type MomEvent = ImmediateEvent | OneShotEvent | PeriodicEvent;
+type IcarusEvent = ImmediateEvent | OneShotEvent | PeriodicEvent;
 
 class EventsWatcher {
   private timers: Map<string, NodeJS.Timeout> = new Map();
@@ -204,7 +204,7 @@ class EventsWatcher {
   
   private handleFile(filename: string): void { /* parse, schedule */ }
   private handleDelete(filename: string): void { /* cancel timer/cron */ }
-  private execute(filename: string, event: MomEvent): void { /* enqueue */ }
+  private execute(filename: string, event: IcarusEvent): void { /* enqueue */ }
 }
 ```
 
@@ -214,7 +214,7 @@ class EventsWatcher {
 
 ## System Prompt Section
 
-The following should be added to mom's system prompt:
+The following should be added to icarus's system prompt:
 
 ```markdown
 ## Events

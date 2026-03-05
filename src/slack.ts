@@ -65,14 +65,14 @@ export interface SlackContext {
 	deleteMessage: () => Promise<void>;
 }
 
-export interface MomHandler {
+export interface IcarusHandler {
 	/**
 	 * Check if channel is currently running (SYNC)
 	 */
 	isRunning(channelId: string): boolean;
 
 	/**
-	 * Handle an event that triggers mom (ASYNC)
+	 * Handle an event that triggers icarus (ASYNC)
 	 * Called only when isRunning() returned false for user messages.
 	 * Events always queue and pass isEvent=true.
 	 */
@@ -80,7 +80,7 @@ export interface MomHandler {
 
 	/**
 	 * Handle stop command (ASYNC)
-	 * Called when user says "stop" while mom is running
+	 * Called when user says "stop" while icarus is running
 	 */
 	handleStop(channelId: string, slack: SlackBot): Promise<void>;
 }
@@ -125,7 +125,7 @@ class ChannelQueue {
 export class SlackBot {
 	private socketClient: SocketModeClient;
 	private webClient: WebClient;
-	private handler: MomHandler;
+	private handler: IcarusHandler;
 	private workingDir: string;
 	private store: ChannelStore;
 	private botUserId: string | null = null;
@@ -136,7 +136,7 @@ export class SlackBot {
 	private queues = new Map<string, ChannelQueue>();
 
 	constructor(
-		handler: MomHandler,
+		handler: IcarusHandler,
 		config: { appToken: string; botToken: string; workingDir: string; store: ChannelStore },
 	) {
 		this.handler = handler;
@@ -321,7 +321,7 @@ export class SlackBot {
 
 			// SYNC: Check if busy
 			if (this.handler.isRunning(e.channel)) {
-				this.postMessage(e.channel, "_Already working. Say `@mom stop` to cancel._");
+				this.postMessage(e.channel, "_Already working. Say `@icarus stop` to cancel._");
 			} else {
 				this.getQueue(e.channel).enqueue(() => this.handler.handleEvent(slackEvent, this));
 			}
@@ -488,7 +488,7 @@ export class SlackBot {
 			pageCount++;
 		} while (cursor && pageCount < maxPages);
 
-		// Filter: include mom's messages, exclude other bots, skip already logged
+		// Filter: include icarus's messages, exclude other bots, skip already logged
 		const relevantMessages = allMessages.filter((msg) => {
 			if (!msg.ts || existingTs.has(msg.ts)) return false; // Skip duplicates
 			if (msg.user === this.botUserId) return true;
@@ -504,7 +504,7 @@ export class SlackBot {
 
 		// Log each message to log.jsonl
 		for (const msg of relevantMessages) {
-			const isMomMessage = msg.user === this.botUserId;
+			const isIcarusMessage = msg.user === this.botUserId;
 			const user = this.users.get(msg.user!);
 			// Strip @mentions from text (same as live messages)
 			const text = (msg.text || "").replace(/<@[A-Z0-9]+>/gi, "").trim();
@@ -514,12 +514,12 @@ export class SlackBot {
 			this.logToFile(channelId, {
 				date: new Date(parseFloat(msg.ts!) * 1000).toISOString(),
 				ts: msg.ts!,
-				user: isMomMessage ? "bot" : msg.user!,
-				userName: isMomMessage ? undefined : user?.userName,
-				displayName: isMomMessage ? undefined : user?.displayName,
+				user: isIcarusMessage ? "bot" : msg.user!,
+				userName: isIcarusMessage ? undefined : user?.userName,
+				displayName: isIcarusMessage ? undefined : user?.displayName,
 				text,
 				attachments,
-				isBot: isMomMessage,
+				isBot: isIcarusMessage,
 			});
 		}
 
@@ -529,7 +529,7 @@ export class SlackBot {
 	private async backfillAllChannels(): Promise<void> {
 		const startTime = Date.now();
 
-		// Only backfill channels that already have a log.jsonl (mom has interacted with them before)
+		// Only backfill channels that already have a log.jsonl (icarus has interacted with them before)
 		const channelsToBackfill: Array<[string, SlackChannel]> = [];
 		for (const [channelId, channel] of this.channels) {
 			const logPath = join(this.workingDir, channelId, "log.jsonl");

@@ -11,13 +11,13 @@ This project now uses:
 From the repo root:
 
 ```bash
-docker compose up -d redis mom-sandbox
+docker compose up -d redis icarus-sandbox
 ```
 
 This gives you:
 
 - `redis` on `localhost:6379`
-- `mom-sandbox` container with `./data` mounted at `/workspace`
+- `icarus-sandbox` container with `./data` mounted at `/workspace`
 
 ## 2) Create and configure Discord app
 
@@ -55,7 +55,7 @@ For local testing, run a tunnel (e.g. ngrok/cloudflared) and use that URL.
 
 ## 5) Environment variables
 
-Set these before starting mom:
+Set these before starting icarus:
 
 ```bash
 export DISCORD_BOT_TOKEN=...
@@ -71,7 +71,7 @@ Optional Anthropic key if you don't use linked OAuth auth file:
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-## 6) Run mom
+## 6) Run icarus
 
 ```bash
 npm run dev
