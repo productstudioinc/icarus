@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: mom-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+
+  mom-sandbox:
+    image: alpine:latest
+    container_name: mom-sandbox
+    command: ["tail", "-f", "/dev/null"]
+    volumes:
+      - ./data:/workspace
+    restart: unless-stopped
+
+volumes:
+  redis-data:
