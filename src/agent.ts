@@ -452,7 +452,7 @@ function createRunner(sandboxConfig: SandboxConfig, channelId: string, channelDi
 			tools,
 		},
 		convertToLlm,
-		getApiKey: llmBackend === "anthropic" ? async () => getAnthropicApiKey(authStorage) : undefined,
+		getApiKey: llmBackend === "anthropic" ? async () => getAnthropicApiKey(authStorage) : async () => "claude-agent-sdk-managed",
 	});
 
 	// Load existing messages

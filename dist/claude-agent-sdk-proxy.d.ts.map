@@ -1,0 +1,1 @@
+{"version":3,"file":"claude-agent-sdk-proxy.d.ts","sourceRoot":"","sources":["../src/claude-agent-sdk-proxy.ts"],"names":[],"mappings":"AAAA,OAAO,EAQN,KAAK,KAAK,EAGV,MAAM,qBAAqB,CAAC;AAia7B,MAAM,WAAW,qBAAqB;IACrC,OAAO,CAAC,EAAE,MAAM,CAAC;CACjB;AAED,wBAAgB,wBAAwB,CAAC,OAAO,CAAC,EAAE,qBAAqB,GAAG,KAAK,CAAC,GAAG,CAAC,CAqBpF"}

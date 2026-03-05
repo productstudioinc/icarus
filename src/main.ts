@@ -201,8 +201,10 @@ function createChatContext(thread: any, message: any, conversationId: string, st
 async function addWorkingReaction(thread: any, message: any): Promise<void> {
 	if (thread.isDM) return;
 	if (!message?.id) return;
+	const channelId = thread?.channelId ?? message?.channelId;
+	if (!channelId) return;
 	try {
-		await thread.adapter.addReaction(thread.id, message.id, emoji.eyes);
+		await thread.adapter.addReaction(channelId, message.id, emoji.eyes);
 	} catch (err) {
 		log.logWarning("Failed to add 👀 reaction", err instanceof Error ? err.message : String(err));
 	}
@@ -211,8 +213,10 @@ async function addWorkingReaction(thread: any, message: any): Promise<void> {
 async function removeWorkingReaction(thread: any, message: any): Promise<void> {
 	if (thread.isDM) return;
 	if (!message?.id) return;
+	const channelId = thread?.channelId ?? message?.channelId;
+	if (!channelId) return;
 	try {
-		await thread.adapter.removeReaction(thread.id, message.id, emoji.eyes);
+		await thread.adapter.removeReaction(channelId, message.id, emoji.eyes);
 	} catch {
 		// best effort
 	}
@@ -343,10 +347,11 @@ let shuttingDown = false;
 const gatewayLoop = async (): Promise<void> => {
 	while (!shuttingDown) {
 		try {
+			let listenerDone: Promise<unknown> | undefined;
 			const response = await discordAdapter.startGatewayListener(
 				{
 					waitUntil: (task: Promise<unknown>) => {
-						void task.catch((err) => log.logWarning("Gateway background task failed", String(err)));
+						listenerDone = task;
 					},
 				},
 				10 * 60 * 1000,
@@ -357,6 +362,11 @@ const gatewayLoop = async (): Promise<void> => {
 			if (!response.ok) {
 				const text = await response.text();
 				log.logWarning("Discord gateway listener ended with non-ok response", `${response.status}: ${text}`);
+			}
+
+			// Wait for the actual gateway listener to finish before starting a new one
+			if (listenerDone) {
+				await listenerDone.catch((err) => log.logWarning("Gateway background task failed", String(err)));
 			}
 		} catch (err) {
 			log.logWarning("Discord gateway listener crashed", err instanceof Error ? err.message : String(err));
