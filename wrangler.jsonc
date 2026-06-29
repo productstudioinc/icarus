@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "icarus",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "ai": {
+    "binding": "AI"
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["FlueRegistry", "FlueHaloCreatorAgent"] },
+    { "tag": "v2", "new_sqlite_classes": ["DiscordGateway"] }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "DISCORD_GATEWAY", "class_name": "DiscordGateway" }
+    ]
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  }
+}

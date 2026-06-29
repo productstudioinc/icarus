@@ -1,0 +1,2 @@
+patchedDependencies:
+  '@flue/runtime@1.0.0-beta.7': patches/@flue__runtime@1.0.0-beta.7.patch

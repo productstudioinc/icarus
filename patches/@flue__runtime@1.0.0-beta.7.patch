@@ -1,0 +1,108 @@
+diff --git a/dist/cloudflare/internal.mjs b/dist/cloudflare/internal.mjs
+index d068ab491c57cb250bd9cc918ed0672231f4ae65..6b47d620f1365aba3f8e28f0a1b2a5d4917b1907 100644
+--- a/dist/cloudflare/internal.mjs
++++ b/dist/cloudflare/internal.mjs
+@@ -4,6 +4,7 @@ import { a as runWithCloudflareContext, n as resolveCloudflareExtension, o as cf
+ import { createAssistantMessageEventStream, parseStreamingJson } from "@earendil-works/pi-ai";
+ import { DurableObject } from "cloudflare:workers";
+ import { convertMessages } from "@earendil-works/pi-ai/openai-completions";
++import { streamAnthropic } from "@earendil-works/pi-ai/anthropic";
+ //#region src/cloudflare/registry-ops.ts
+ /**
+ * Internal run-pointer index for the Cloudflare target.
+@@ -738,14 +739,93 @@ async function safeReadText(response) {
+ 		return;
+ 	}
+ }
++//#region cloudflare anthropic binding (patch: withastro/flue#327)
++/**
++* Cloudflare's AI binding forwards `anthropic/...` model ids through the AI
++* Gateway to Anthropic's Messages API, whose wire format differs from the
++* Workers AI / OpenAI chat protocol that `streamCloudflareWorkersAi` speaks:
++* it requires `max_tokens`, a top-level string `system`, and only user/
++* assistant roles. Sending the OpenAI-shaped payload makes those models 400
++* ("Required value missing: max_tokens" / "Invalid value at messages[0].role").
++*
++* For anthropic ids we delegate request construction and SSE parsing to pi-ai's
++* Anthropic provider (`streamAnthropic`), injecting a client whose transport is
++* the binding instead of HTTPS. Other ids (`@cf/...`, `openai/...`) keep the
++* existing OpenAI-compatible path.
++*/
++const DEFAULT_ANTHROPIC_MAX_TOKENS = 8192;
++function isCloudflareAnthropicModel(model) {
++	return model.provider === "cloudflare" && typeof model.id === "string" && model.id.startsWith("anthropic/");
++}
++/**
++* Anthropic accepts `system` as an array of text blocks, but Cloudflare's
++* binding gateway validation rejects it ("expected string, received array").
++* Collapse it to the concatenated text.
++*/
++function normalizeAnthropicSystem(system) {
++	if (!Array.isArray(system)) return system;
++	return system.map((block) => typeof block === "string" ? block : block?.text ?? "").join("");
++}
++/**
++* Minimal duck-typed `@anthropic-ai/sdk` client. `streamAnthropic` only calls
++* `client.messages.create(params, opts).asResponse()` and then reads
++* `response.body`, so a binding-backed `asResponse()` is all that's needed.
++* Non-2xx responses are surfaced here, before stream parsing, so provider
++* errors do not turn into empty assistant messages.
++*/
++function createBindingAnthropicClient(model, ai, options) {
++	return { messages: { create(params, requestOptions) {
++		return { async asResponse() {
++			const body = { ...params };
++			if (body.system !== void 0) body.system = normalizeAnthropicSystem(body.system);
++			const extraHeaders = {};
++			if (options?.headers) Object.assign(extraHeaders, options.headers);
++			const gateway = getModelGateway(model);
++			const signal = requestOptions?.signal ?? options?.signal;
++			const response = await ai.run(model.id, body, {
++				returnRawResponse: true,
++				...signal ? { signal } : {},
++				...Object.keys(extraHeaders).length > 0 ? { extraHeaders } : {},
++				...gateway ? { gateway } : {}
++			});
++			if (!response.ok) {
++				const errorBody = await safeReadText(response);
++				throw new Error(`Cloudflare AI binding returned ${response.status} ${response.statusText}` + (errorBody ? `: ${errorBody}` : ""));
++			}
++			return response;
++		} };
++	} } };
++}
++const streamCloudflareAnthropic = (model, context, options) => {
++	const ai = resolveBinding(model);
++	// `eager_input_streaming` on tools needs the fine-grained-tool-streaming beta
++	// header (which the binding does not send); disable it so the gateway accepts
++	// the tool definitions. Caching is disabled to avoid `cache_control` fields
++	// the stricter gateway validation may reject.
++	const anthropicModel = {
++		...model,
++		compat: { ...model.compat, supportsEagerToolInputStreaming: false }
++	};
++	const anthropicOptions = {
++		...options,
++		client: createBindingAnthropicClient(model, ai, options),
++		cacheRetention: "none",
++		maxTokens: options?.maxTokens ?? (model.maxTokens && model.maxTokens > 0 ? model.maxTokens : DEFAULT_ANTHROPIC_MAX_TOKENS)
++	};
++	return streamAnthropic(anthropicModel, context, anthropicOptions);
++};
++const streamCloudflareBinding = (model, context, options) => {
++	return isCloudflareAnthropicModel(model) ? streamCloudflareAnthropic(model, context, options) : streamCloudflareWorkersAi(model, context, options);
++};
++//#endregion
+ /**
+ * Return the pi-ai `ApiProvider` definition for the Cloudflare AI binding.
+ */
+ function getCloudflareAIBindingApiProvider() {
+ 	return {
+ 		api: CLOUDFLARE_AI_BINDING_API,
+-		stream: streamCloudflareWorkersAi,
+-		streamSimple: streamCloudflareWorkersAi
++		stream: streamCloudflareBinding,
++		streamSimple: streamCloudflareBinding
+ 	};
+ }
+ //#endregion

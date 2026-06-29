@@ -1,0 +1,23 @@
+{
+  "name": "icarus",
+  "version": "1.0.0",
+  "description": "Halo AI creator assistant - a Flue agent on Cloudflare Workers",
+  "type": "module",
+  "packageManager": "pnpm@10.28.2",
+  "scripts": {
+    "dev": "flue dev --target cloudflare",
+    "build": "flue build --target cloudflare",
+    "run:agent": "flue run --target cloudflare halo-creator",
+    "deploy": "wrangler deploy --config dist/icarus/wrangler.json"
+  },
+  "dependencies": {
+    "@discordjs/rest": "^2.6.1",
+    "@flue/runtime": "^1.0.0-beta.7",
+    "agents": "^0.14.5",
+    "valibot": "^1.4.1"
+  },
+  "devDependencies": {
+    "@flue/cli": "^1.0.0-beta.7",
+    "wrangler": "^4.105.0"
+  }
+}

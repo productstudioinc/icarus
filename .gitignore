@@ -1,0 +1,10 @@
+node_modules
+dist
+.dev.vars*
+.env*
+
+# Generated build artifacts / local state
+.wrangler
+.flue-vite
+.flue-vite.wrangler.jsonc
+*.tsbuildinfo
